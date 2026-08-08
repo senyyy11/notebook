@@ -2,6 +2,7 @@
 title: RMSNorm 均方根层归一化详解
 aliases:
   - RMSNorm
+  - RSMNorm
 tags:
   - 深度学习
   - Transformer
