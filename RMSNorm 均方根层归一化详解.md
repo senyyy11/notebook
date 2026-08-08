@@ -532,3 +532,4 @@ RMSNorm 的完整过程可以压缩为三步：
 1. Biao Zhang, Rico Sennrich. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467), NeurIPS 2019.
 2. Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton. [Layer Normalization](https://arxiv.org/abs/1607.06450), 2016.
 3. PyTorch Documentation. [`torch.nn.RMSNorm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html).
+
