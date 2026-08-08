@@ -2,7 +2,6 @@
 title: RMSNorm 均方根层归一化详解
 aliases:
   - RMSNorm
-  - RSMNorm
 tags:
   - 深度学习
   - Transformer
@@ -12,9 +11,6 @@ created: 2026-08-08
 ---
 
 # RMSNorm：从公式、直觉到 Transformer 实践
-
-> [!note] 名称说明
-> “RSMNorm”通常是 **RMSNorm** 的误写。RMSNorm 的全称是 **Root Mean Square Layer Normalization**，中文一般译为“均方根层归一化”。本文统一使用 RMSNorm。
 
 ## 一句话理解
 
@@ -535,4 +531,3 @@ RMSNorm 的完整过程可以压缩为三步：
 1. Biao Zhang, Rico Sennrich. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467), NeurIPS 2019.
 2. Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton. [Layer Normalization](https://arxiv.org/abs/1607.06450), 2016.
 3. PyTorch Documentation. [`torch.nn.RMSNorm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html).
-
