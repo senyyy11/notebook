@@ -104,19 +104,11 @@ $$
 - $\boldsymbol{\gamma}$：可学习的逐元素缩放参数，通常初始化为全 1；
 - $\odot$：逐元素乘法。
 
-整个数据流可以表示为：
+整个数据流如图所示：输入向量一方面用于计算归一化尺度，另一方面保留为被缩放的对象；二者在逐元素缩放处汇合。
 
-```mermaid
-flowchart LR
-    X["输入向量 x"] --> S["逐元素平方 x²"]
-    S --> M["沿隐藏维度求均值"]
-    M --> E["加上 ε"]
-    E --> R["计算倒数平方根"]
-    X --> N["按元素缩放"]
-    R --> N
-    N --> G["乘以可学习参数 γ"]
-    G --> Y["输出向量 y"]
-```
+![RMSNorm 计算流程](assets/RMSNorm 均方根层归一化详解/RMSNorm_计算流程.png)
+
+*图 1：RMSNorm 的计算流程。图中展示了均方根尺度的计算分支，以及原始向量与该尺度在逐元素缩放处的汇合。来源：AI 生成示意图，用于解释本节公式。*
 
 ### 为什么归一化之后还要乘以 $\gamma$
 
@@ -353,21 +345,11 @@ $$
 
 它不会混合不同 batch 样本，也不会混合不同 token，更不会使用整个训练集的运行统计量。
 
-在 Pre-Norm Transformer 中，典型结构为：
+在 Pre-Norm Transformer 中，典型结构如图所示。每个子层都先对输入进行 RMSNorm，再经过注意力或 MLP 变换，最后与未变换的残差支路相加。
 
-```mermaid
-flowchart TB
-    H["隐藏状态 h"] --> N1["RMSNorm"]
-    N1 --> A["Self-Attention"]
-    H --> ADD1["残差相加"]
-    A --> ADD1
-    ADD1 --> H1["隐藏状态 h′"]
-    H1 --> N2["RMSNorm"]
-    N2 --> MLP["MLP"]
-    H1 --> ADD2["残差相加"]
-    MLP --> ADD2
-    ADD2 --> H2["隐藏状态 h″"]
-```
+![Pre-Norm Transformer 中 RMSNorm 的位置](assets/RMSNorm 均方根层归一化详解/PreNorm_Transformer_结构.png)
+
+*图 2：Pre-Norm Transformer 块中的 RMSNorm 与残差连接。上半部分为注意力子层，下半部分为 MLP 子层；旁路箭头表示不经过子层变换的残差支路。来源：AI 生成示意图，用于解释本节结构。*
 
 对应公式为：
 
@@ -532,4 +514,3 @@ RMSNorm 的完整过程可以压缩为三步：
 1. Biao Zhang, Rico Sennrich. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467), NeurIPS 2019.
 2. Jimmy Lei Ba, Jamie Ryan Kiros, Geoffrey E. Hinton. [Layer Normalization](https://arxiv.org/abs/1607.06450), 2016.
 3. PyTorch Documentation. [`torch.nn.RMSNorm`](https://docs.pytorch.org/docs/stable/generated/torch.nn.RMSNorm.html).
-
