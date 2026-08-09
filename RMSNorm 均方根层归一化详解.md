@@ -26,9 +26,7 @@ RMSNorm 是 LayerNorm 的简化形式：它**不减去输入均值，只根据�
 
 设 Transformer 中一个 token 的隐藏向量为：
 
-$$
-\mathbf{x}=[x_1,x_2,\ldots,x_d]
-$$
+$$\mathbf{x}=[x_1,x_2,\ldots,x_d]$$
 
 其中 $d$ 是隐藏维度，例如 4096。经过连续的线性变换、注意力、非线性函数和残差相加后，中间激活值的尺度可能不断改变：
 
@@ -43,35 +41,21 @@ $$
 
 向量 $\mathbf{x}$ 的均方根定义为：
 
-$$
-\mathrm{RMS}(\mathbf{x})
-=
-\sqrt{\frac{1}{d}\sum_{i=1}^{d}x_i^2}
-$$
+$$\mathrm{RMS}(\mathbf{x}) = \sqrt{\frac{1}{d}\sum_{i=1}^{d}x_i^2}$$
 
 计算过程是：逐元素平方、求平均、再开平方。
 
 例如：
 
-$$
-\mathbf{x}=[1,2,3,4]
-$$
+$$\mathbf{x}=[1,2,3,4]$$
 
 则：
 
-$$
-\mathrm{RMS}(\mathbf{x})
-=\sqrt{\frac{1^2+2^2+3^2+4^2}{4}}
-=\sqrt{7.5}
-\approx2.739
-$$
+$$\mathrm{RMS}(\mathbf{x}) =\sqrt{\frac{1^2+2^2+3^2+4^2}{4}} =\sqrt{7.5} \approx2.739$$
 
 RMS 描述的是向量的整体数值幅度。它与欧几里得范数的关系为：
 
-$$
-\mathrm{RMS}(\mathbf{x})
-=\frac{\|\mathbf{x}\|_2}{\sqrt d}
-$$
+$$\mathrm{RMS}(\mathbf{x}) =\frac{\|\mathbf{x}\|_2}{\sqrt d}$$
 
 因此，从几何上看，RMSNorm 与“把向量调整到固定半径附近”密切相关。
 
@@ -79,23 +63,11 @@ $$
 
 RMSNorm 通常定义为：
 
-$$
-\mathrm{RMSNorm}(\mathbf{x})_i
-=
-\gamma_i
-\frac{x_i}{
-\sqrt{\frac{1}{d}\sum_{j=1}^{d}x_j^2+\epsilon}}
-$$
+$$\mathrm{RMSNorm}(\mathbf{x})_i = \gamma_i \frac{x_i}{ \sqrt{\frac{1}{d}\sum_{j=1}^{d}x_j^2+\epsilon}}$$
 
 写成向量形式：
 
-$$
-\mathbf{y}
-=
-\boldsymbol{\gamma}\odot
-\frac{\mathbf{x}}
-{\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}}
-$$
+$$\mathbf{y} = \boldsymbol{\gamma}\odot \frac{\mathbf{x}} {\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}}$$
 
 各符号的含义如下：
 
@@ -120,31 +92,21 @@ $$
 
 仍取：
 
-$$
-\mathbf{x}=[1,2,3,4]
-$$
+$$\mathbf{x}=[1,2,3,4]$$
 
 忽略很小的 $\epsilon$，已知：
 
-$$
-\mathrm{RMS}(\mathbf{x})\approx2.739
-$$
+$$\mathrm{RMS}(\mathbf{x})\approx2.739$$
 
 归一化结果为：
 
-$$
-\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})}
-\approx[0.365,0.730,1.095,1.461]
-$$
+$$\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})} \approx[0.365,0.730,1.095,1.461]$$
 
 若 $\boldsymbol{\gamma}=[1,1,1,1]$，这就是最终输出。
 
 这个结果的均值不为 0，方差也不一定为 1；但它的均方根约为 1：
 
-$$
-\sqrt{\frac{0.365^2+0.730^2+1.095^2+1.461^2}{4}}
-\approx1
-$$
+$$\sqrt{\frac{0.365^2+0.730^2+1.095^2+1.461^2}{4}} \approx1$$
 
 这揭示了 RMSNorm 真正控制的量：**输出在乘以 $\gamma$ 之前的均方值，而不是均值或方差。**
 
@@ -154,32 +116,19 @@ $$
 
 LayerNorm 首先计算均值和方差：
 
-$$
-\mu=\frac{1}{d}\sum_{i=1}^{d}x_i
-$$
+$$\mu=\frac{1}{d}\sum_{i=1}^{d}x_i$$
 
-$$
-\sigma^2=\frac{1}{d}\sum_{i=1}^{d}(x_i-\mu)^2
-$$
+$$\sigma^2=\frac{1}{d}\sum_{i=1}^{d}(x_i-\mu)^2$$
 
 然后执行：
 
-$$
-\mathrm{LayerNorm}(\mathbf{x})_i
-=
-\gamma_i\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta_i
-$$
+$$\mathrm{LayerNorm}(\mathbf{x})_i = \gamma_i\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta_i$$
 
 ### 5.2 RMSNorm
 
 RMSNorm 跳过求均值和减均值：
 
-$$
-\mathrm{RMSNorm}(\mathbf{x})_i
-=
-\gamma_i\frac{x_i}
-{\sqrt{\frac{1}{d}\sum_jx_j^2+\epsilon}}
-$$
+$$\mathrm{RMSNorm}(\mathbf{x})_i = \gamma_i\frac{x_i} {\sqrt{\frac{1}{d}\sum_jx_j^2+\epsilon}}$$
 
 二者的关键区别如下：
 
@@ -199,25 +148,15 @@ $$
 
 注意：
 
-$$
-\mathrm{RMS}(\mathbf{x})^2
-=\frac{1}{d}\sum_i x_i^2
-=\mathrm{Var}(\mathbf{x})+\mu^2
-$$
+$$\mathrm{RMS}(\mathbf{x})^2 =\frac{1}{d}\sum_i x_i^2 =\mathrm{Var}(\mathbf{x})+\mu^2$$
 
 因此：
 
-$$
-\mathrm{RMS}(\mathbf{x})
-=\sqrt{\mathrm{Var}(\mathbf{x})+\mu^2}
-$$
+$$\mathrm{RMS}(\mathbf{x}) =\sqrt{\mathrm{Var}(\mathbf{x})+\mu^2}$$
 
 当输入均值接近 0 时：
 
-$$
-\mathrm{RMS}(\mathbf{x})
-\approx\sqrt{\mathrm{Var}(\mathbf{x})}
-$$
+$$\mathrm{RMS}(\mathbf{x}) \approx\sqrt{\mathrm{Var}(\mathbf{x})}$$
 
 此时 RMSNorm 和 LayerNorm 使用的尺度因子很接近。RMSNorm 原论文的核心假设就是：在许多网络中，LayerNorm 的“重新居中”能力可能不是必需的，只保留“重新缩放”也能达到相近效果。
 
@@ -227,25 +166,17 @@ $$
 
 令：
 
-$$
-\mathbf{x}'=\mathbf{x}+c\mathbf{1}
-$$
+$$\mathbf{x}'=\mathbf{x}+c\mathbf{1}$$
 
 例如把 $[1,2,3]$ 变成 $[101,102,103]$。
 
 LayerNorm 会减去均值，所以忽略数值误差时：
 
-$$
-\mathrm{LN}(\mathbf{x}+c\mathbf{1})
-=\mathrm{LN}(\mathbf{x})
-$$
+$$\mathrm{LN}(\mathbf{x}+c\mathbf{1}) =\mathrm{LN}(\mathbf{x})$$
 
 RMSNorm 不减均值，一般有：
 
-$$
-\mathrm{RMSNorm}(\mathbf{x}+c\mathbf{1})
-\ne\mathrm{RMSNorm}(\mathbf{x})
-$$
+$$\mathrm{RMSNorm}(\mathbf{x}+c\mathbf{1}) \ne\mathrm{RMSNorm}(\mathbf{x})$$
 
 因此 RMSNorm 会保留一定的整体偏移信息。
 
@@ -253,23 +184,15 @@ $$
 
 令：
 
-$$
-\mathbf{x}'=a\mathbf{x},\quad a>0
-$$
+$$\mathbf{x}'=a\mathbf{x},\quad a>0$$
 
 忽略 $\epsilon$ 时：
 
-$$
-\mathrm{RMS}(a\mathbf{x})
-=a\mathrm{RMS}(\mathbf{x})
-$$
+$$\mathrm{RMS}(a\mathbf{x}) =a\mathrm{RMS}(\mathbf{x})$$
 
 因此：
 
-$$
-\frac{a\mathbf{x}}{\mathrm{RMS}(a\mathbf{x})}
-=\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})}
-$$
+$$\frac{a\mathbf{x}}{\mathrm{RMS}(a\mathbf{x})} =\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})}$$
 
 也就是说，RMSNorm 基本消除了输入整体正比例放大的影响。严格来说，当 $\epsilon\ne0$ 时这是近似不变；若 $a<0$，输出方向还会发生符号翻转。
 
@@ -297,26 +220,15 @@ LayerNorm 需要处理均值、中心化、方差、缩放和偏移；RMSNorm �
 
 先忽略 $\gamma$，定义：
 
-$$
-r=\sqrt{\frac{1}{d}\sum_i x_i^2+\epsilon},
-\qquad z_i=\frac{x_i}{r}
-$$
+$$r=\sqrt{\frac{1}{d}\sum_i x_i^2+\epsilon}, \qquad z_i=\frac{x_i}{r}$$
 
 可得：
 
-$$
-\frac{\partial z_i}{\partial x_j}
-=\frac{\delta_{ij}}{r}-\frac{x_ix_j}{d r^3}
-$$
+$$\frac{\partial z_i}{\partial x_j} =\frac{\delta_{ij}}{r}-\frac{x_ix_j}{d r^3}$$
 
 其中 $\delta_{ij}$ 是克罗内克符号。若上游梯度为 $\mathbf{g}$，则输入梯度为：
 
-$$
-\frac{\partial L}{\partial\mathbf{x}}
-=\frac{\mathbf{g}}{r}
--\frac{\mathbf{x}}{r^3}
-\mathrm{mean}(\mathbf{g}\odot\mathbf{x})
-$$
+$$\frac{\partial L}{\partial\mathbf{x}} =\frac{\mathbf{g}}{r} -\frac{\mathbf{x}}{r^3} \mathrm{mean}(\mathbf{g}\odot\mathbf{x})$$
 
 加入 $\gamma$ 时，可先令 $\mathbf{u}=\mathbf{g}\odot\boldsymbol{\gamma}$，再用 $\mathbf{u}$ 替换上式中的 $\mathbf{g}$。
 
@@ -331,17 +243,11 @@ $$
 
 假设隐藏状态形状为：
 
-$$
-[B,T,D]
-$$
+$$[B,T,D]$$
 
 其中 $B$ 是批量大小，$T$ 是序列长度，$D$ 是隐藏维度。RMSNorm 通常只沿最后一个维度 $D$ 计算，即每个 token 的隐藏向量独立归一化：
 
-$$
-\mathbf{x}_{b,t,:}
-\longrightarrow
-\mathrm{RMSNorm}(\mathbf{x}_{b,t,:})
-$$
+$$\mathbf{x}_{b,t,:} \longrightarrow \mathrm{RMSNorm}(\mathbf{x}_{b,t,:})$$
 
 它不会混合不同 batch 样本，也不会混合不同 token，更不会使用整个训练集的运行统计量。
 
@@ -353,17 +259,9 @@ $$
 
 对应公式为：
 
-$$
-\mathbf{h}'
-=\mathbf{h}
-+\mathrm{Attention}(\mathrm{RMSNorm}(\mathbf{h}))
-$$
+$$\mathbf{h}' =\mathbf{h} +\mathrm{Attention}(\mathrm{RMSNorm}(\mathbf{h}))$$
 
-$$
-\mathbf{h}''
-=\mathbf{h}'
-+\mathrm{MLP}(\mathrm{RMSNorm}(\mathbf{h}'))
-$$
+$$\mathbf{h}'' =\mathbf{h}' +\mathrm{MLP}(\mathrm{RMSNorm}(\mathbf{h}'))$$
 
 需要区分两个独立的设计问题：
 
@@ -481,21 +379,15 @@ RMSNorm 的完整过程可以压缩为三步：
 
 1. 计算均方根尺度：
 
-   $$
-   r=\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}
-   $$
+   $$r=\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}$$
 
 2. 用输入除以该尺度：
 
-   $$
-   \hat{\mathbf{x}}=\frac{\mathbf{x}}{r}
-   $$
+   $$\hat{\mathbf{x}}=\frac{\mathbf{x}}{r}$$
 
 3. 乘以可学习参数：
 
-   $$
-   \mathbf{y}=\boldsymbol{\gamma}\odot\hat{\mathbf{x}}
-   $$
+   $$\mathbf{y}=\boldsymbol{\gamma}\odot\hat{\mathbf{x}}$$
 
 最重要的理解是：
 
