@@ -44,7 +44,7 @@ $$
 向量 $\mathbf{x}$ 的均方根定义为：
 
 $$
-\operatorname{RMS}(\mathbf{x})
+\mathrm{RMS}(\mathbf{x})
 =
 \sqrt{\frac{1}{d}\sum_{i=1}^{d}x_i^2}
 $$
@@ -60,7 +60,7 @@ $$
 则：
 
 $$
-\operatorname{RMS}(\mathbf{x})
+\mathrm{RMS}(\mathbf{x})
 =\sqrt{\frac{1^2+2^2+3^2+4^2}{4}}
 =\sqrt{7.5}
 \approx2.739
@@ -69,7 +69,7 @@ $$
 RMS 描述的是向量的整体数值幅度。它与欧几里得范数的关系为：
 
 $$
-\operatorname{RMS}(\mathbf{x})
+\mathrm{RMS}(\mathbf{x})
 =\frac{\|\mathbf{x}\|_2}{\sqrt d}
 $$
 
@@ -80,7 +80,7 @@ $$
 RMSNorm 通常定义为：
 
 $$
-\operatorname{RMSNorm}(\mathbf{x})_i
+\mathrm{RMSNorm}(\mathbf{x})_i
 =
 \gamma_i
 \frac{x_i}{
@@ -94,7 +94,7 @@ $$
 =
 \boldsymbol{\gamma}\odot
 \frac{\mathbf{x}}
-{\sqrt{\operatorname{mean}(\mathbf{x}^2)+\epsilon}}
+{\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}}
 $$
 
 各符号的含义如下：
@@ -106,7 +106,7 @@ $$
 
 整个数据流如图所示：输入向量一方面用于计算归一化尺度，另一方面保留为被缩放的对象；二者在逐元素缩放处汇合。
 
-![RMSNorm 计算流程](assets/RMSNorm 均方根层归一化详解/RMSNorm_计算流程.png)
+![RMSNorm 计算流程](assets/rmsnorm/computation-flow.png)
 
 *图 1：RMSNorm 的计算流程。图中展示了均方根尺度的计算分支，以及原始向量与该尺度在逐元素缩放处的汇合。来源：AI 生成示意图，用于解释本节公式。*
 
@@ -127,13 +127,13 @@ $$
 忽略很小的 $\epsilon$，已知：
 
 $$
-\operatorname{RMS}(\mathbf{x})\approx2.739
+\mathrm{RMS}(\mathbf{x})\approx2.739
 $$
 
 归一化结果为：
 
 $$
-\frac{\mathbf{x}}{\operatorname{RMS}(\mathbf{x})}
+\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})}
 \approx[0.365,0.730,1.095,1.461]
 $$
 
@@ -165,7 +165,7 @@ $$
 然后执行：
 
 $$
-\operatorname{LayerNorm}(\mathbf{x})_i
+\mathrm{LayerNorm}(\mathbf{x})_i
 =
 \gamma_i\frac{x_i-\mu}{\sqrt{\sigma^2+\epsilon}}+\beta_i
 $$
@@ -175,7 +175,7 @@ $$
 RMSNorm 跳过求均值和减均值：
 
 $$
-\operatorname{RMSNorm}(\mathbf{x})_i
+\mathrm{RMSNorm}(\mathbf{x})_i
 =
 \gamma_i\frac{x_i}
 {\sqrt{\frac{1}{d}\sum_jx_j^2+\epsilon}}
@@ -200,23 +200,23 @@ $$
 注意：
 
 $$
-\operatorname{RMS}(\mathbf{x})^2
+\mathrm{RMS}(\mathbf{x})^2
 =\frac{1}{d}\sum_i x_i^2
-=\operatorname{Var}(\mathbf{x})+\mu^2
+=\mathrm{Var}(\mathbf{x})+\mu^2
 $$
 
 因此：
 
 $$
-\operatorname{RMS}(\mathbf{x})
-=\sqrt{\operatorname{Var}(\mathbf{x})+\mu^2}
+\mathrm{RMS}(\mathbf{x})
+=\sqrt{\mathrm{Var}(\mathbf{x})+\mu^2}
 $$
 
 当输入均值接近 0 时：
 
 $$
-\operatorname{RMS}(\mathbf{x})
-\approx\sqrt{\operatorname{Var}(\mathbf{x})}
+\mathrm{RMS}(\mathbf{x})
+\approx\sqrt{\mathrm{Var}(\mathbf{x})}
 $$
 
 此时 RMSNorm 和 LayerNorm 使用的尺度因子很接近。RMSNorm 原论文的核心假设就是：在许多网络中，LayerNorm 的“重新居中”能力可能不是必需的，只保留“重新缩放”也能达到相近效果。
@@ -236,15 +236,15 @@ $$
 LayerNorm 会减去均值，所以忽略数值误差时：
 
 $$
-\operatorname{LN}(\mathbf{x}+c\mathbf{1})
-=\operatorname{LN}(\mathbf{x})
+\mathrm{LN}(\mathbf{x}+c\mathbf{1})
+=\mathrm{LN}(\mathbf{x})
 $$
 
 RMSNorm 不减均值，一般有：
 
 $$
-\operatorname{RMSNorm}(\mathbf{x}+c\mathbf{1})
-\ne\operatorname{RMSNorm}(\mathbf{x})
+\mathrm{RMSNorm}(\mathbf{x}+c\mathbf{1})
+\ne\mathrm{RMSNorm}(\mathbf{x})
 $$
 
 因此 RMSNorm 会保留一定的整体偏移信息。
@@ -260,15 +260,15 @@ $$
 忽略 $\epsilon$ 时：
 
 $$
-\operatorname{RMS}(a\mathbf{x})
-=a\operatorname{RMS}(\mathbf{x})
+\mathrm{RMS}(a\mathbf{x})
+=a\mathrm{RMS}(\mathbf{x})
 $$
 
 因此：
 
 $$
-\frac{a\mathbf{x}}{\operatorname{RMS}(a\mathbf{x})}
-=\frac{\mathbf{x}}{\operatorname{RMS}(\mathbf{x})}
+\frac{a\mathbf{x}}{\mathrm{RMS}(a\mathbf{x})}
+=\frac{\mathbf{x}}{\mathrm{RMS}(\mathbf{x})}
 $$
 
 也就是说，RMSNorm 基本消除了输入整体正比例放大的影响。严格来说，当 $\epsilon\ne0$ 时这是近似不变；若 $a<0$，输出方向还会发生符号翻转。
@@ -315,7 +315,7 @@ $$
 \frac{\partial L}{\partial\mathbf{x}}
 =\frac{\mathbf{g}}{r}
 -\frac{\mathbf{x}}{r^3}
-\operatorname{mean}(\mathbf{g}\odot\mathbf{x})
+\mathrm{mean}(\mathbf{g}\odot\mathbf{x})
 $$
 
 加入 $\gamma$ 时，可先令 $\mathbf{u}=\mathbf{g}\odot\boldsymbol{\gamma}$，再用 $\mathbf{u}$ 替换上式中的 $\mathbf{g}$。
@@ -340,14 +340,14 @@ $$
 $$
 \mathbf{x}_{b,t,:}
 \longrightarrow
-\operatorname{RMSNorm}(\mathbf{x}_{b,t,:})
+\mathrm{RMSNorm}(\mathbf{x}_{b,t,:})
 $$
 
 它不会混合不同 batch 样本，也不会混合不同 token，更不会使用整个训练集的运行统计量。
 
 在 Pre-Norm Transformer 中，典型结构如图所示。每个子层都先对输入进行 RMSNorm，再经过注意力或 MLP 变换，最后与未变换的残差支路相加。
 
-![Pre-Norm Transformer 中 RMSNorm 的位置](assets/RMSNorm 均方根层归一化详解/PreNorm_Transformer_结构.png)
+![Pre-Norm Transformer 中 RMSNorm 的位置](assets/rmsnorm/prenorm-transformer.png)
 
 *图 2：Pre-Norm Transformer 块中的 RMSNorm 与残差连接。上半部分为注意力子层，下半部分为 MLP 子层；旁路箭头表示不经过子层变换的残差支路。来源：AI 生成示意图，用于解释本节结构。*
 
@@ -356,13 +356,13 @@ $$
 $$
 \mathbf{h}'
 =\mathbf{h}
-+\operatorname{Attention}(\operatorname{RMSNorm}(\mathbf{h}))
++\mathrm{Attention}(\mathrm{RMSNorm}(\mathbf{h}))
 $$
 
 $$
 \mathbf{h}''
 =\mathbf{h}'
-+\operatorname{MLP}(\operatorname{RMSNorm}(\mathbf{h}'))
++\mathrm{MLP}(\mathrm{RMSNorm}(\mathbf{h}'))
 $$
 
 需要区分两个独立的设计问题：
@@ -464,7 +464,7 @@ $\epsilon$ 是数值稳定性所必需的，但它也意味着缩放不变性不
 > 因为它没有减去均值。
 
 > [!warning] RMSNorm 不保证输出方差为 1
-> 它控制的是 $\operatorname{mean}(z_i^2)\approx1$，而不是 $\operatorname{mean}((z_i-\bar z)^2)=1$。
+> 它控制的是 $\mathrm{mean}(z_i^2)\approx1$，而不是 $\mathrm{mean}((z_i-\bar z)^2)=1$。
 
 > [!warning] RMSNorm 不是在整个 batch 上归一化
 > Transformer 中通常是对每个 token 的隐藏维度独立计算。
@@ -482,7 +482,7 @@ RMSNorm 的完整过程可以压缩为三步：
 1. 计算均方根尺度：
 
    $$
-   r=\sqrt{\operatorname{mean}(\mathbf{x}^2)+\epsilon}
+   r=\sqrt{\mathrm{mean}(\mathbf{x}^2)+\epsilon}
    $$
 
 2. 用输入除以该尺度：
