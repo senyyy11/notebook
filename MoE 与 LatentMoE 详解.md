@@ -476,7 +476,9 @@ $$V_{\mathrm{latent}}\approx\frac{1}{\alpha}V_{\mathrm{standard}}$$
 
 LatentMoE 把省下来的预算用于两种不同目标。
 
-## 19. 效率型 LatentMoE：$\ell$-MoE$_{\mathrm{eff}}$
+## 19. 效率型 LatentMoE（eff 配置）
+
+论文将这一配置记为 $\ell\text{-MoE}_{\mathrm{eff}}$。
 
 效率型版本的目标是保持标准 MoE 的准确率，同时减少推理成本。
 
@@ -505,7 +507,9 @@ $$K'\ell=K\ell=\frac{1}{\alpha}Kd$$
 - 专家通信量下降；
 - 目标是以更低成本匹配标准 MoE 的效果。
 
-## 20. 准确率型 LatentMoE：$\ell$-MoE$_{\mathrm{acc}}$
+## 20. 准确率型 LatentMoE（acc 配置）
+
+论文将这一配置记为 $\ell\text{-MoE}_{\mathrm{acc}}$。
 
 准确率型版本的目标是在推理成本近似不变时提高模型效果。
 
