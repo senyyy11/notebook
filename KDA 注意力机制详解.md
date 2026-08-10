@@ -273,6 +273,6 @@ $$\boxed{S_t=\left(I-\beta_tk_tk_t^\top\right)\mathrm{Diag}(\boldsymbol{\alpha}_
 
 1. KDA 的 chunkwise WY 表示如何把递推计算转化为块内并行计算？
 2. 通道级遗忘门控与显式位置编码之间是什么关系？
-3. 固定状态容量如何随 $d_k$、$d_v$ 和注意力头数变化？
+3. 固定状态容量如何随 $d_k$，$d_v$ 和注意力头数变化？
 4. KDA 与 Gated DeltaNet、Mamba、RetNet 在状态转移矩阵上有什么统一解释？
 5. 混合架构中，KDA 与全局注意力的最优比例由哪些任务属性决定？
