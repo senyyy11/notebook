@@ -298,6 +298,51 @@ $$L_{\mathrm{KL}}=D_{\mathrm{KL}}\left(q_\phi(z_t\mid h_t,o_t)\|p_\theta(z_t\mid
 
 $$L_{\mathrm{WM}}=\lambda_oL_{\mathrm{obs}}+\lambda_zL_{\mathrm{dyn}}+\lambda_rL_{\mathrm{reward-pred}}+\lambda_dL_{\mathrm{done}}+\lambda_{\mathrm{KL}}L_{\mathrm{KL}}+\lambda_{\mathrm{reg}}L_{\mathrm{reg}}$$
 
+### 总损失公式中的符号说明
+
+上式表示：训练世界模型时，不只检查一种预测结果，而是把多个训练目标加权后形成一个标量损失。优化器最终最小化的是这个总损失。
+
+| 符号 | 名称 | 具体含义 |
+|---|---|---|
+| $L_{\mathrm{WM}}$ | 世界模型总损失 | 所有世界模型训练目标的加权和。它是优化器实际用于更新世界模型参数的整体目标，数值越小通常表示模型在当前定义的训练任务上拟合得越好。下标 $\mathrm{WM}$ 是 World Model 的缩写。 |
+| $\lambda_o$ | 观察损失权重 | 控制观察重建或观察预测在总损失中的影响程度。下标 $o$ 表示 observation。 |
+| $L_{\mathrm{obs}}$ | 观察损失 | 衡量预测观察 $\hat o_t$ 与真实观察 $o_t$ 的差异。它可以是图像像素均方误差、离散图像 token 的交叉熵，也可以是观察负对数似然。 |
+| $\lambda_z$ | 动态损失权重 | 控制潜在状态预测在总损失中的影响程度。下标 $z$ 表示 latent state，即潜在状态。 |
+| $L_{\mathrm{dyn}}$ | 动态预测损失 | 衡量动态模型预测的下一潜在状态 $\hat z_{t+1}$ 与由真实下一观察得到的目标状态 $z_{t+1}$ 之间的差异。下标 $\mathrm{dyn}$ 是 dynamics 的缩写。 |
+| $\lambda_r$ | 奖励预测损失权重 | 控制奖励预测准确性对共享表示和世界模型参数的影响。下标 $r$ 表示 reward。 |
+| $L_{\mathrm{reward-pred}}$ | 奖励预测损失 | 衡量预测奖励 $\hat r_t$ 与真实奖励 $r_t$ 的差异。这里惩罚的是“奖励有没有预测准确”，而不是“奖励值是否足够高”。 |
+| $\lambda_d$ | 终止预测损失权重 | 控制终止或继续预测在总损失中的影响程度。下标 $d$ 表示 done。 |
+| $L_{\mathrm{done}}$ | 终止预测损失 | 衡量模型对轨迹终止标记 $d_t$ 的预测是否正确，通常使用二元交叉熵。若模型预测继续概率 $c_t$，这一项也可能写成 $L_{\mathrm{continue}}$。 |
+| $\lambda_{\mathrm{KL}}$ | KL 损失权重 | 控制动态先验与观察后验对齐的强度。权重过小可能导致想象状态与真实观察状态不一致，过大则可能压制潜在表示中的有效信息。 |
+| $L_{\mathrm{KL}}$ | KL 散度损失 | 衡量后验 $q_\phi(z_t\mid h_t,o_t)$ 与先验 $p_\theta(z_t\mid h_t)$ 的差异，使模型在没有未来真实观察时仍能从历史预测合理状态。 |
+| $\lambda_{\mathrm{reg}}$ | 正则项权重 | 控制正则化约束的影响程度。下标 $\mathrm{reg}$ 是 regularization 的缩写。 |
+| $L_{\mathrm{reg}}$ | 正则化损失 | 不是某一个固定公式，而是额外的稳定性约束，例如参数权重衰减、潜在表示方差约束、协方差约束、熵约束或防止表示坍塌的损失。 |
+
+所有 $\lambda$ 都是非负权重超参数，通常由研究者设定，而不是模型从训练数据中自动学习。它们有三个作用：
+
+1. 平衡不同损失项的数值尺度。例如图像重建误差可能远大于二元终止损失，直接相加会让前者完全支配训练。
+2. 调整不同训练目标对共享表示的影响。例如增加 $\lambda_r$，会促使潜在状态保留更多与任务奖励有关的信息。
+3. 启用或关闭某类目标。令某个权重为零，就相当于不使用对应损失。
+
+加号表示这些损失在同一次优化中被汇总，但不代表每一种世界模型都必须包含全部六项。例如：
+
+- 不重建像素的表示式世界模型可以不使用 $L_{\mathrm{obs}}$；
+- 环境没有奖励标签时，可以不使用 $L_{\mathrm{reward-pred}}$；
+- 非概率的确定性动态模型可能不使用 $L_{\mathrm{KL}}$；
+- 没有 episode 终止概念的数据可以不使用 $L_{\mathrm{done}}$。
+
+如果把批次和时间维度显式写出来，总损失通常还会对样本和时间步求平均：
+
+$$L_{\mathrm{WM}}=\frac{1}{BT}\sum_{b=1}^{B}\sum_{t=1}^{T}\left(\lambda_oL_{\mathrm{obs}}^{(b,t)}+\lambda_zL_{\mathrm{dyn}}^{(b,t)}+\lambda_rL_{\mathrm{reward-pred}}^{(b,t)}+\lambda_dL_{\mathrm{done}}^{(b,t)}+\lambda_{\mathrm{KL}}L_{\mathrm{KL}}^{(b,t)}+\lambda_{\mathrm{reg}}L_{\mathrm{reg}}^{(b,t)}\right)$$
+
+其中，$B$ 是一个训练批次中的轨迹或序列数量，$T$ 是每段训练序列包含的时间步数，$b$ 是批次样本编号，$t$ 是序列内部的时间步编号，上标 $(b,t)$ 表示该损失来自第 $b$ 个样本的第 $t$ 个时间步。
+
+如果用 $\Theta_{\mathrm{WM}}$ 统一表示编码器、Dynamics 和各预测头的全部可训练参数，那么训练目标可以写成：
+
+$$\Theta_{\mathrm{WM}}^*=\arg\min_{\Theta_{\mathrm{WM}}}\mathbb{E}_{\tau\sim\mathcal D}\left[L_{\mathrm{WM}}(\tau;\Theta_{\mathrm{WM}})\right]$$
+
+其中，$\Theta_{\mathrm{WM}}^*$ 表示训练完成后得到的最优参数，$\mathcal D$ 是真实交互轨迹数据集，$\tau$ 是从数据集采样的一段轨迹，$\mathbb{E}$ 表示对不同训练轨迹求期望，$\arg\min$ 表示寻找能使总损失最小的参数。
+
 ### 9.1 观察重建损失
 
 如果需要还原图像或传感器观察：
