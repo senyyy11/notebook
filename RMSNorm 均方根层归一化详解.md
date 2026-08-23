@@ -324,6 +324,249 @@ x * torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + eps)
 
 其中 `rsqrt(a)` 表示 $1/\sqrt a$。
 
+### 10.3 验证手写实现与 PyTorch 实现一致
+
+下面的实验固定随机种子，把两个模块的缩放参数设为相同值，然后比较输出。使用 `torch.testing.assert_close` 比单纯打印结果更可靠：如果实现不一致，程序会直接报告误差。
+
+```python
+import torch
+import torch.nn as nn
+
+
+class SimpleRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__()
+        self.eps = eps
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+
+    def forward(self, x):
+        input_dtype = x.dtype
+        x_float = x.float()
+        rms_inverse = torch.rsqrt(
+            x_float.pow(2).mean(dim=-1, keepdim=True) + self.eps
+        )
+        normalized = x_float * rms_inverse
+        return normalized.to(input_dtype) * self.weight
+
+
+torch.manual_seed(42)
+
+hidden_size = 8
+eps = 1e-6
+x = torch.randn(2, 3, hidden_size, dtype=torch.float32)
+
+manual_norm = SimpleRMSNorm(hidden_size, eps=eps)
+pytorch_norm = nn.RMSNorm(hidden_size, eps=eps)
+
+# 保证两个模块使用完全相同的可学习参数
+with torch.no_grad():
+    shared_weight = torch.linspace(0.5, 1.5, hidden_size)
+    manual_norm.weight.copy_(shared_weight)
+    pytorch_norm.weight.copy_(shared_weight)
+
+manual_output = manual_norm(x)
+pytorch_output = pytorch_norm(x)
+
+torch.testing.assert_close(
+    manual_output,
+    pytorch_output,
+    rtol=1e-5,
+    atol=1e-6,
+)
+
+max_error = (manual_output - pytorch_output).abs().max().item()
+print(f"两个实现的最大绝对误差：{max_error:.8f}")
+print("验证通过：手写实现与 PyTorch 实现一致。")
+```
+
+> [!tip] 环境要求
+> `nn.RMSNorm` 需要较新的 PyTorch。如果当前环境没有该模块，仍可单独使用上面的 `SimpleRMSNorm`。
+
+### 10.4 验证归一化后的 RMS 约为 1
+
+为了验证公式本身，下面暂时不乘可学习参数 $\gamma$。若加入了不全为 1 的 $\gamma$，最终输出各维度会被再次缩放，其 RMS 不再保证为 1。
+
+```python
+import torch
+
+torch.manual_seed(0)
+
+# 形状为 [batch_size, sequence_length, hidden_size]
+x = torch.randn(2, 4, 6)
+
+eps = 1e-6
+normalized = x * torch.rsqrt(
+    x.pow(2).mean(dim=-1, keepdim=True) + eps
+)
+
+# 每个 token 都沿最后一个隐藏维度独立计算 RMS
+output_rms = torch.sqrt(
+    normalized.pow(2).mean(dim=-1)
+)
+
+print("归一化后每个 token 的 RMS：")
+print(output_rms)
+
+expected = torch.ones_like(output_rms)
+torch.testing.assert_close(output_rms, expected, rtol=1e-5, atol=1e-5)
+```
+
+输出会非常接近：
+
+```text
+tensor([[1.0000, 1.0000, 1.0000, 1.0000],
+        [1.0000, 1.0000, 1.0000, 1.0000]])
+```
+
+### 10.5 用代码对比 RMSNorm 与 LayerNorm
+
+下面使用同一个输入，并把两个模块的可学习缩放参数都设为 1。LayerNorm 还会把偏置设为 0，以便只观察归一化操作本身。
+
+```python
+import torch
+import torch.nn as nn
+
+x = torch.tensor([[1.0, 2.0, 3.0, 4.0]])
+
+rms_norm = nn.RMSNorm(4, eps=1e-6)
+layer_norm = nn.LayerNorm(4, eps=1e-6)
+
+with torch.no_grad():
+    rms_norm.weight.fill_(1.0)
+    layer_norm.weight.fill_(1.0)
+    layer_norm.bias.zero_()
+
+rms_output = rms_norm(x)
+layer_output = layer_norm(x)
+
+print("原始输入：", x)
+print("RMSNorm：", rms_output)
+print("LayerNorm：", layer_output)
+
+print("RMSNorm 输出均值：", rms_output.mean(dim=-1))
+print("RMSNorm 输出 RMS：", rms_output.pow(2).mean(dim=-1).sqrt())
+print("LayerNorm 输出均值：", layer_output.mean(dim=-1))
+print("LayerNorm 输出方差：", layer_output.var(dim=-1, unbiased=False))
+```
+
+应重点观察：
+
+- RMSNorm 输出的 RMS 接近 1，但均值不为 0；
+- LayerNorm 输出的均值接近 0，方差接近 1；
+- RMSNorm 保留了输入各元素均为正数这一整体偏移信息，而 LayerNorm 消除了该偏移。
+
+还可以用下面的代码验证二者对整体平移的反应：
+
+```python
+shifted_x = x + 100.0
+
+print(
+    "LayerNorm 平移前后是否一致：",
+    torch.allclose(layer_norm(x), layer_norm(shifted_x), atol=1e-5),
+)
+print(
+    "RMSNorm 平移前后是否一致：",
+    torch.allclose(rms_norm(x), rms_norm(shifted_x), atol=1e-5),
+)
+```
+
+预期结果是 LayerNorm 为 `True`，RMSNorm 为 `False`。
+
+### 10.6 在 Pre-Norm Transformer 块中使用
+
+下面是一个精简但可以运行的 Transformer 模块。两次 RMSNorm 分别位于注意力层和 MLP 之前，而残差连接绕过相应子层。
+
+```python
+import torch
+import torch.nn as nn
+
+
+class RMSPreNormTransformerBlock(nn.Module):
+    def __init__(self, hidden_size, num_heads, expansion=4, eps=1e-6):
+        super().__init__()
+
+        self.attention_norm = nn.RMSNorm(hidden_size, eps=eps)
+        self.attention = nn.MultiheadAttention(
+            embed_dim=hidden_size,
+            num_heads=num_heads,
+            batch_first=True,
+        )
+
+        self.mlp_norm = nn.RMSNorm(hidden_size, eps=eps)
+        self.mlp = nn.Sequential(
+            nn.Linear(hidden_size, expansion * hidden_size),
+            nn.GELU(),
+            nn.Linear(expansion * hidden_size, hidden_size),
+        )
+
+    def forward(self, x, attention_mask=None):
+        # Pre-Norm Attention：先归一化，再进入注意力层，最后残差相加
+        normalized_x = self.attention_norm(x)
+        attention_output, _ = self.attention(
+            normalized_x,
+            normalized_x,
+            normalized_x,
+            attn_mask=attention_mask,
+            need_weights=False,
+        )
+        x = x + attention_output
+
+        # Pre-Norm MLP：同样先归一化，再经过 MLP，最后残差相加
+        x = x + self.mlp(self.mlp_norm(x))
+        return x
+
+
+torch.manual_seed(0)
+
+block = RMSPreNormTransformerBlock(
+    hidden_size=64,
+    num_heads=4,
+)
+
+x = torch.randn(2, 10, 64)
+y = block(x)
+
+print("输入形状：", x.shape)
+print("输出形状：", y.shape)
+assert y.shape == x.shape
+```
+
+这段代码体现了两个独立概念：`nn.RMSNorm` 决定采用什么归一化算法，而它出现在注意力和 MLP 之前，则体现了 Pre-Norm 的结构选择。
+
+### 10.7 验证反向传播
+
+归一化层不仅参与前向计算，也必须允许梯度传回输入和可学习参数。下面是一个最小反向传播检查：
+
+```python
+import torch
+import torch.nn as nn
+
+torch.manual_seed(7)
+
+x = torch.randn(2, 3, 8, requires_grad=True)
+norm = nn.RMSNorm(8, eps=1e-6)
+
+y = norm(x)
+loss = y.pow(2).mean()
+loss.backward()
+
+print("损失：", loss.item())
+print("输入梯度形状：", x.grad.shape)
+print("缩放参数梯度形状：", norm.weight.grad.shape)
+print("输入梯度是否全为有限值：", torch.isfinite(x.grad).all().item())
+print(
+    "参数梯度是否全为有限值：",
+    torch.isfinite(norm.weight.grad).all().item(),
+)
+
+assert x.grad is not None
+assert norm.weight.grad is not None
+assert torch.isfinite(x.grad).all()
+assert torch.isfinite(norm.weight.grad).all()
+```
+
+如果断言全部通过，说明该层的前向和反向计算均能正常工作。这里检查的是程序行为与数值有限性，并不等同于完整的梯度正确性证明；严格检查还可以使用 `torch.autograd.gradcheck` 和双精度输入。
+
 ## 11. RMSNorm、LayerNorm 与 BatchNorm
 
 | 方法 | 统计范围 | 是否依赖 batch | 常见应用 |
