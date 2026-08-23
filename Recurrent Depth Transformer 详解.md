@@ -140,7 +140,191 @@ $$H^{(r+1)}=\widetilde{H}^{(r)}+\mathrm{FFN}\left(\mathrm{LN}(\widetilde{H}^{(r)
 
 实际 Huginn 使用的归一化顺序、输入拼接适配器、RMSNorm 与 gated SiLU MLP 比上述教学公式更具体；上式用于说明循环机制，不应当当作所有 Recurrent-Depth Transformer 的唯一实现。
 
-## 5. 为什么这种归纳偏置可能适合组合推理
+## 5. 模型核心代码
+
+下面给出一个与前文公式和张量形状对应的 PyTorch 教学版骨架。它保留四个最关键的结构：
+
+1. Prelude、Recurrent Core、Coda 是三个不同模块；
+2. Core 内部的若干层各有自己的参数，但整组 Core 在不同 recurrence 之间复用；
+3. 输入表征 $e$ 在每轮循环中重新注入；
+4. `num_recursions` 可以在训练或推理时改变。
+
+代码用于理解架构边界，不是 Huginn 官方实现。官方模型还包含专门的 sandwich RMSNorm、gated SiLU MLP、初始化、截断反向传播和分布式训练设计。
+
+```python
+import math
+
+import torch
+import torch.nn as nn
+
+
+class TransformerStack(nn.Module):
+    """一组参数互不相同的 Transformer 层。"""
+
+    def __init__(self, d_model, n_heads, d_ff, depth, dropout=0.0):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            nn.TransformerEncoderLayer(
+                d_model=d_model,
+                nhead=n_heads,
+                dim_feedforward=d_ff,
+                dropout=dropout,
+                activation="gelu",
+                batch_first=True,
+                norm_first=True,
+            )
+            for _ in range(depth)
+        ])
+
+    def forward(self, x, causal_mask):
+        for layer in self.layers:
+            x = layer(x, src_mask=causal_mask)
+        return x
+
+
+class RecurrentCore(nn.Module):
+    """同一份 Core 参数会被整个模型循环调用 num_recursions 次。"""
+
+    def __init__(self, d_model, n_heads, d_ff, core_depth):
+        super().__init__()
+        # 对应 R_theta(e, s)：把输入表征 e 与上一轮状态 s 拼接后压回 d_model。
+        self.input_adapter = nn.Linear(2 * d_model, d_model)
+        self.layers = TransformerStack(
+            d_model=d_model,
+            n_heads=n_heads,
+            d_ff=d_ff,
+            depth=core_depth,
+        )
+        self.output_norm = nn.RMSNorm(d_model)
+
+    def forward(self, embedded_input, state, causal_mask):
+        x = torch.cat([state, embedded_input], dim=-1)
+        x = self.input_adapter(x)
+        x = self.layers(x, causal_mask)
+        return self.output_norm(x)
+
+
+class RecurrentDepthLM(nn.Module):
+    def __init__(
+        self,
+        vocab_size,
+        d_model=512,
+        n_heads=8,
+        d_ff=2048,
+        prelude_depth=2,
+        core_depth=4,
+        coda_depth=2,
+        state_std=0.02,
+    ):
+        super().__init__()
+        self.d_model = d_model
+        self.state_std = state_std
+
+        self.token_embedding = nn.Embedding(vocab_size, d_model)
+        self.prelude = TransformerStack(
+            d_model, n_heads, d_ff, prelude_depth
+        )
+        self.core = RecurrentCore(
+            d_model, n_heads, d_ff, core_depth
+        )
+        self.coda = TransformerStack(
+            d_model, n_heads, d_ff, coda_depth
+        )
+
+        self.final_norm = nn.RMSNorm(d_model)
+        self.lm_head = nn.Linear(d_model, vocab_size, bias=False)
+        self.lm_head.weight = self.token_embedding.weight  # tied embeddings
+
+    @staticmethod
+    def build_causal_mask(seq_len, device, dtype):
+        # 上三角为 -inf，当前位置不能注意未来 token。
+        mask = torch.full(
+            (seq_len, seq_len),
+            float("-inf"),
+            device=device,
+            dtype=dtype,
+        )
+        return torch.triu(mask, diagonal=1)
+
+    def forward(self, input_ids, num_recursions, initial_state=None):
+        if num_recursions < 1:
+            raise ValueError("num_recursions 必须至少为 1")
+
+        batch_size, seq_len = input_ids.shape
+        x = self.token_embedding(input_ids) * math.sqrt(self.d_model)
+        causal_mask = self.build_causal_mask(
+            seq_len=seq_len,
+            device=x.device,
+            dtype=x.dtype,
+        )
+
+        # e = P(x)，形状始终为 [batch, seq_len, d_model]。
+        embedded_input = self.prelude(x, causal_mask)
+
+        # s_0：教学代码允许外部传入，默认采用论文式随机初态。
+        if initial_state is None:
+            state = torch.randn_like(embedded_input) * self.state_std
+        else:
+            if initial_state.shape != embedded_input.shape:
+                raise ValueError("initial_state 的形状必须与 embedded_input 相同")
+            state = initial_state
+
+        # 关键：这里只创建过一个 self.core，循环时始终复用同一份参数。
+        for _ in range(num_recursions):
+            state = self.core(
+                embedded_input=embedded_input,
+                state=state,
+                causal_mask=causal_mask,
+            )
+
+        hidden = self.coda(state, causal_mask)
+        logits = self.lm_head(self.final_norm(hidden))
+        return logits
+```
+
+### 5.1 代码如何对应公式
+
+设批大小为 $B$、序列长度为 $n$、隐藏维度为 $h$，则核心张量形状为：
+
+| 代码变量 | 数学符号 | 形状 | 作用 |
+|---|---|---|---|
+| `input_ids` | $x$ | $[B,n]$ | token 编号 |
+| `embedded_input` | $e=P(x)$ | $[B,n,h]$ | Prelude 输出，每轮都会重新注入 |
+| `state` | $s_i$ | $[B,n,h]$ | 第 $i$ 轮潜在状态 |
+| `cat([state, embedded_input])` | $[s_{i-1};e]$ | $[B,n,2h]$ | 汇合当前状态与原始输入表征 |
+| `input_adapter(...)` | $A[s_{i-1};e]$ | $[B,n,h]$ | 把拼接结果映射回隐藏维度 |
+| `logits` | $C(s_r)$ 的未归一化输出 | $[B,n,|V|]$ | 每个位置的词表 logits |
+
+`TransformerStack` 内部的层不共享参数。例如 `core_depth=4` 时，Core 保存四组不同层参数；真正的深度循环发生在 `for _ in range(num_recursions)`，四层 Core 整体被重复调用。于是核心有效深度仍为：
+
+$$D_{\mathrm{core}}=\mathtt{core\_depth}\times\mathtt{num\_recursions}$$
+
+### 5.2 动态循环训练的最小用法
+
+训练时可以为不同批次采样不同的循环次数。下面用均匀分布演示调用方式；它不是 Huginn 论文使用的 log-normal Poisson 分布：
+
+```python
+import random
+import torch.nn.functional as F
+
+
+def language_model_loss(model, token_ids, r_min=4, r_max=12):
+    # token_ids: [batch, seq_len + 1]
+    inputs = token_ids[:, :-1]
+    targets = token_ids[:, 1:]
+
+    num_recursions = random.randint(r_min, r_max)
+    logits = model(inputs, num_recursions=num_recursions)
+
+    return F.cross_entropy(
+        logits.reshape(-1, logits.size(-1)),
+        targets.reshape(-1),
+    )
+```
+
+由于相同的 `self.core` 在展开图中出现多次，默认自动微分会把各轮对共享参数的梯度贡献累加起来。若循环很深，实际训练还需要激活检查点、截断反向传播或其他内存控制；上面的最小代码没有实现这些大规模训练优化。
+
+## 6. 为什么这种归纳偏置可能适合组合推理
 
 许多组合问题都可以写成“反复应用同一类状态转移规则”。例如：
 
@@ -160,7 +344,7 @@ $$f\left(f\left(f(x)\right)\right)$$
 
 这只是架构直觉，并不证明模型必然学到了人类可解释的算法。受控任务中的深度外推结果支持“共享迭代有利于某些组合泛化”，但能否扩展到开放域语言推理，还取决于训练数据、初始化、任务结构和停止机制。
 
-## 6. 它与 RNN 的区别
+## 7. 它与 RNN 的区别
 
 两者都共享参数并反复更新隐藏状态，但循环所沿的轴不同。
 
@@ -178,9 +362,9 @@ $$H_{r+1}=F_\theta(H_r,X)$$
 
 因此可以把 Recurrent Depth 看成一种“以深度迭代为时间轴”的隐藏状态动力系统，但不要据此把它和传统逐 token RNN 当成同一种架构。
 
-## 7. 它与 Chain-of-Thought 的区别
+## 8. 它与 Chain-of-Thought 的区别
 
-### 7.1 显式 token 推理
+### 8.1 显式 token 推理
 
 Chain-of-Thought（CoT）通过生成更多中间 token 增加计算：
 
@@ -188,7 +372,7 @@ $$y_1\rightarrow y_2\rightarrow\cdots\rightarrow y_T\rightarrow\text{答案}$$
 
 中间过程进入上下文，可以被人阅读、监督、修改，也会增加序列长度和 KV Cache。
 
-### 7.2 潜在深度推理
+### 8.2 潜在深度推理
 
 Recurrent Depth 在输出 token 之前增加隐藏空间计算：
 
@@ -198,7 +382,7 @@ $$H^{(0)}\rightarrow H^{(1)}\rightarrow\cdots\rightarrow H^{(R)}\rightarrow\text
 
 不过，“纵向 CoT”只能作为类比。一次 recurrence 只是一次新的潜在状态变换，并不保证对应一个清晰、离散、可翻译成人类语言的推理步骤。对 Huginn-3.5B 的 probing 研究只发现了有限且不稳定的可解释 latent CoT 证据，不同循环层和解码探针甚至会给出不一致的解释。
 
-### 7.3 三条 test-time scaling 路线
+### 8.3 三条 test-time scaling 路线
 
 可以把推理时扩展粗略分为三条互补路线：
 
@@ -210,15 +394,15 @@ $$H^{(0)}\rightarrow H^{(1)}\rightarrow\cdots\rightarrow H^{(R)}\rightarrow\text
 
 三者并不互斥。一个 Agent 可以在每次调用内部使用 recurrent depth，同时输出部分 CoT 或结构化计划，并在调用之间使用工具验证。
 
-## 8. 训练：为什么不能只在推理时随便多循环
+## 9. 训练：为什么不能只在推理时随便多循环
 
-### 8.1 固定循环次数的问题
+### 9.1 固定循环次数的问题
 
 如果训练始终使用 $R=4$，模型可能形成依赖绝对轮次的策略，例如“第 4 轮收尾”。推理时突然改为 $R=10$，额外循环可能继续改写已经正确的状态，导致性能下降。
 
 因此，架构上“可以循环任意多次”不等于训练后“任意增加循环都有效”。是否能外推，必须由实验验证。
 
-### 8.2 Dynamic Recurrence
+### 9.2 Dynamic Recurrence
 
 一种重要训练方法是对每个训练样本或微批次随机采样循环次数：
 
@@ -239,7 +423,7 @@ $$\mathcal{L}(\theta)=\mathbb{E}_{x\sim\mathcal{D}}\mathbb{E}_{r\sim\Lambda}\lef
 
 Huginn 采用重尾的 log-normal Poisson 采样，使模型大多看到中等循环次数，偶尔看到明显更深的展开。受控多跳实验也发现，在相同最大训练循环预算下，动态循环通常能更有效地利用可外推范围，并对 overthinking 更稳健；但这些结果依赖具体任务与初始化，不能直接推广为普适定律。
 
-### 8.3 梯度如何穿过循环
+### 9.3 梯度如何穿过循环
 
 循环在训练时被展开，参数 $\theta$ 在各轮共享。最终损失对共享参数的梯度，会汇总每个循环位置的贡献：
 
@@ -253,7 +437,7 @@ $$\frac{\partial\mathcal{L}}{\partial\theta}=\sum_{r=1}^{R}\frac{\partial\mathca
 
 Huginn 为控制内存，只对最后 $k$ 个循环做截断反向传播，主实验取 $k=8$；同时使用特定归一化与初始化稳定大规模训练。另一项受控工作则报告 LayerScale、接近恒等映射的循环初始化有助于稳定 20 步以上的深循环。这些是具体实现的工程选择，不属于 Recurrent Depth 定义本身。
 
-## 9. 推理时增加循环与深度外推
+## 10. 推理时增加循环与深度外推
 
 训练循环上限为 $R_{\mathrm{train}}$ 后，推理时可以尝试更大的 $R_{\mathrm{test}}$：
 
@@ -271,7 +455,7 @@ $$R_{\mathrm{test}}>R_{\mathrm{train}}$$
 
 尤其要警惕数据捷径：若答案能由关系序列的短后缀猜出，模型可能看似完成几十跳组合，实际没有逐步检索中间实体。可靠实验需要让每一步关系都真正影响最终答案，并通过因果分析排除捷径。
 
-## 10. Overthinking：算得更久为什么可能变差
+## 11. Overthinking：算得更久为什么可能变差
 
 循环次数增加后，准确率常呈现先升后降：
 
@@ -285,7 +469,7 @@ $$R=8\ \text{较好},\qquad R=16\ \text{更好},\qquad R=32\ \text{反而变差}
 
 Dynamic Recurrence 能缓解这一问题，但不能保证彻底消除。更根本的问题是：模型什么时候应该停止？
 
-## 11. Adaptive Halting
+## 12. Adaptive Halting
 
 固定给所有样本相同的 $R$ 会浪费简单问题的计算，也可能让已解决问题过度迭代。Adaptive Halting 希望让模型按样本难度决定何时停止。
 
@@ -302,7 +486,7 @@ $$\mathrm{KL}\left(p_r\,\|\,p_{r-1}\right)<\varepsilon_{\mathrm{KL}}\qquad\text{
 
 仅凭“变化很小”就停止可能过早，因为模型也可能稳定在一个高熵、没有把握的状态。因此受控实验把低 KL 和低熵同时作为条件。但这种规则仍需要阈值调节，也没有证明适用于所有开放域任务；学习式 halting 仍是重要研究方向。
 
-## 12. 与 Universal Transformer 和 ALBERT 的关系
+## 13. 与 Universal Transformer 和 ALBERT 的关系
 
 ### Universal Transformer
 
@@ -319,7 +503,7 @@ ALBERT 也跨层共享参数，但主要目标是降低参数冗余和内存占�
 
 因此，不能看到“层间参数共享”就自动把一个模型归类为现代 recurrent-depth test-time scaling 模型。
 
-## 13. 能力、成本与证据边界
+## 14. 能力、成本与证据边界
 
 ### 已得到较强支持的结论
 
@@ -339,7 +523,7 @@ ALBERT 也跨层共享参数，但主要目标是降低参数冗余和内存占�
 
 尤其是 Huginn 的“相当于 50B 参数模型的计算负载”，描述的是某些循环设置下的计算量类比，不是说 3.5B 模型已经普遍达到 50B 模型的能力。
 
-## 14. 最终心智模型
+## 15. 最终心智模型
 
 可以把标准 Transformer 想成一栋由许多不同楼层组成的楼：要继续加深，通常要新建楼层并加入新参数。
 
