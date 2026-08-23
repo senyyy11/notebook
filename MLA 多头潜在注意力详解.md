@@ -364,7 +364,307 @@ $$\mathbf z_{t,i}=\sum_{j\le t}a_{t,j,i}\mathbf c_j^{KV}$$
 
 ---
 
-## 10. KV Cache 节省量
+## 10. 核心代码：教学版 MLA
+
+下面的 PyTorch 代码实现了解耦 RoPE 与矩阵吸收后的 MLA 核心路径。它的目标是让公式与张量操作一一对应，而不是复刻 DeepSeek-V3 中的张量并行、FP8 量化、缓存分页和专用 CUDA Kernel。
+
+代码包含以下关键步骤：
+
+1. `kv_down`：从隐藏状态同时产生低维 KV 潜在向量和位置 Key；
+2. `q_proj`：为每个头产生内容 Query 与位置 Query；
+3. `apply_rope`：只旋转位置通道；
+4. `q_absorbed`：把内容 Key 上投影吸收到 Query；
+5. `latent_kv_cache` 与 `rope_key_cache`：保存每个历史 token 的两份小缓存；
+6. `latent_context`：先在潜在空间聚合，再通过 Value 上投影恢复各头输出。
+
+```python
+import math
+from dataclasses import dataclass
+
+import torch
+import torch.nn as nn
+
+
+@dataclass
+class MLACache:
+    # [batch, cached_tokens, kv_rank]
+    latent_kv: torch.Tensor
+    # [batch, cached_tokens, rope_dim]
+    rope_key: torch.Tensor
+
+
+class RMSNorm(nn.Module):
+    def __init__(self, dim: int, eps: float = 1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(dim))
+        self.eps = eps
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        scale = torch.rsqrt(x.pow(2).mean(dim=-1, keepdim=True) + self.eps)
+        return x * scale * self.weight
+
+
+def apply_rope(x: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
+    """
+    x: [batch, tokens, heads, rope_dim]
+    positions: [tokens]
+
+    为相邻的两个维度应用二维旋转。rope_dim 必须是偶数。
+    """
+    rope_dim = x.size(-1)
+    if rope_dim % 2 != 0:
+        raise ValueError("rope_dim must be even")
+
+    pair_index = torch.arange(0, rope_dim, 2, device=x.device)
+    inv_freq = 1.0 / (10000 ** (pair_index.float() / rope_dim))
+    angles = positions.float()[:, None] * inv_freq[None, :]
+    cos = angles.cos()[None, :, None, :].to(dtype=x.dtype)
+    sin = angles.sin()[None, :, None, :].to(dtype=x.dtype)
+
+    x_even = x[..., 0::2]
+    x_odd = x[..., 1::2]
+    rotated_even = x_even * cos - x_odd * sin
+    rotated_odd = x_even * sin + x_odd * cos
+    return torch.stack((rotated_even, rotated_odd), dim=-1).flatten(-2)
+
+
+class EducationalMLA(nn.Module):
+    """
+    解耦 RoPE、采用矩阵吸收的 MLA 教学实现。
+
+    省略项：Query 低秩压缩、张量并行、量化、分页缓存和专用 Kernel。
+    这些省略项不改变本文关注的 MLA 核心数学关系。
+    """
+
+    def __init__(
+        self,
+        model_dim: int,
+        num_heads: int,
+        kv_rank: int,
+        content_dim: int,
+        rope_dim: int,
+        value_dim: int,
+    ):
+        super().__init__()
+        if rope_dim % 2 != 0:
+            raise ValueError("rope_dim must be even")
+
+        self.num_heads = num_heads
+        self.kv_rank = kv_rank
+        self.content_dim = content_dim
+        self.rope_dim = rope_dim
+        self.value_dim = value_dim
+
+        # q^C 与未旋转的 q^R；每个头拥有自己的 Query 表示。
+        self.q_proj = nn.Linear(
+            model_dim,
+            num_heads * (content_dim + rope_dim),
+            bias=False,
+        )
+
+        # 同一次降维产生 c^KV 和未旋转的位置 Key。
+        self.kv_down = nn.Linear(
+            model_dim,
+            kv_rank + rope_dim,
+            bias=False,
+        )
+        self.kv_norm = RMSNorm(kv_rank)
+
+        # 从共享潜在向量恢复各头的内容 Key 与 Value。
+        self.kv_up = nn.Linear(
+            kv_rank,
+            num_heads * (content_dim + value_dim),
+            bias=False,
+        )
+        self.out_proj = nn.Linear(
+            num_heads * value_dim,
+            model_dim,
+            bias=False,
+        )
+
+        # 缩放仍依据逻辑上的完整 Key 维度，而非吸收后的 kv_rank。
+        self.softmax_scale = 1.0 / math.sqrt(content_dim + rope_dim)
+
+    def _split_kv_up_weight(self):
+        """取出每个头的 W^UK 与 W^UV。"""
+        weight = self.kv_up.weight.view(
+            self.num_heads,
+            self.content_dim + self.value_dim,
+            self.kv_rank,
+        )
+        key_up = weight[:, : self.content_dim, :]     # [heads, content, rank]
+        value_up = weight[:, self.content_dim :, :]  # [heads, value, rank]
+        return key_up, value_up
+
+    def forward(
+        self,
+        hidden: torch.Tensor,
+        cache: MLACache | None = None,
+    ) -> tuple[torch.Tensor, MLACache]:
+        """
+        hidden: [batch, new_tokens, model_dim]
+
+        cache=None 时可以执行 prefill；传入上一步 cache 时可以继续解码。
+        返回当前 new_tokens 的输出和更新后的缓存。
+        """
+        batch, new_tokens, _ = hidden.shape
+        cached_tokens = 0 if cache is None else cache.latent_kv.size(1)
+        positions = torch.arange(
+            cached_tokens,
+            cached_tokens + new_tokens,
+            device=hidden.device,
+        )
+
+        # 1. 产生各头的内容 Query 和位置 Query。
+        query = self.q_proj(hidden).view(
+            batch,
+            new_tokens,
+            self.num_heads,
+            self.content_dim + self.rope_dim,
+        )
+        q_content, q_rope = torch.split(
+            query,
+            [self.content_dim, self.rope_dim],
+            dim=-1,
+        )
+        q_rope = apply_rope(q_rope, positions)
+
+        # 2. 联合产生低维 c^KV 和共享的位置 Key。
+        compressed = self.kv_down(hidden)
+        latent_kv, rope_key = torch.split(
+            compressed,
+            [self.kv_rank, self.rope_dim],
+            dim=-1,
+        )
+        latent_kv = self.kv_norm(latent_kv)
+        rope_key = apply_rope(rope_key.unsqueeze(2), positions).squeeze(2)
+
+        # 3. 每个历史 token 只缓存 c^KV 与共享位置 Key。
+        if cache is not None:
+            latent_kv = torch.cat((cache.latent_kv, latent_kv), dim=1)
+            rope_key = torch.cat((cache.rope_key, rope_key), dim=1)
+        new_cache = MLACache(latent_kv=latent_kv, rope_key=rope_key)
+
+        key_up, value_up = self._split_kv_up_weight()
+
+        # 4. Key 矩阵吸收：q~^C = (W^UK)^T q^C。
+        # 不用为所有历史 token 显式恢复 k^C。
+        q_absorbed = torch.einsum("bthd,hdc->bthc", q_content, key_up)
+
+        # 5. 内容分数与位置分数分别计算，再相加。
+        content_scores = torch.einsum(
+            "bthc,bsc->bhts",
+            q_absorbed,
+            latent_kv,
+        )
+        position_scores = torch.einsum(
+            "bthr,bsr->bhts",
+            q_rope,
+            rope_key,
+        )
+        scores = (content_scores + position_scores) * self.softmax_scale
+
+        # 6. 因果遮罩：位置 t 不能看见比自己更靠后的 Key。
+        total_tokens = latent_kv.size(1)
+        query_positions = positions[:, None]
+        key_positions = torch.arange(total_tokens, device=hidden.device)[None, :]
+        causal_mask = key_positions > query_positions
+        scores = scores.masked_fill(causal_mask[None, None, :, :], float("-inf"))
+        attention = torch.softmax(scores, dim=-1, dtype=torch.float32).to(hidden.dtype)
+
+        # 7. 先在低维潜在空间聚合，再通过 W^UV 恢复各头 Value 输出。
+        latent_context = torch.einsum(
+            "bhts,bsc->bthc",
+            attention,
+            latent_kv,
+        )
+        head_output = torch.einsum(
+            "bthc,hdc->bthd",
+            latent_context,
+            value_up,
+        )
+        output = self.out_proj(head_output.flatten(2))
+        return output, new_cache
+```
+
+### 10.1 代码与公式的对应关系
+
+| 代码 | 数学含义 |
+|---|---|
+| `latent_kv = kv_down(hidden)` 的前半部分 | $\mathbf c_t^{KV}=W^{DKV}\mathbf h_t$ |
+| `key_up` | 各头的内容 Key 上投影 $W_i^{UK}$ |
+| `value_up` | 各头的 Value 上投影 $W_i^{UV}$ |
+| `q_absorbed` | $\widetilde{\mathbf q}_{t,i}^{C}=(W_i^{UK})^{\mathsf T}\mathbf q_{t,i}^{C}$ |
+| `content_scores` | 吸收后的内容匹配分数 |
+| `position_scores` | 解耦 RoPE 的位置匹配分数 |
+| `latent_context` | $\sum_j a_{t,j,i}\mathbf c_j^{KV}$ |
+| `head_output` | $W_i^{UV}\left(\sum_j a_{t,j,i}\mathbf c_j^{KV}\right)$ |
+
+### 10.2 为什么代码中不显式计算完整 Key 和 Value
+
+朴素实现会先执行：
+
+```python
+full_kv = self.kv_up(latent_kv)
+```
+
+然后将它拆成每个头的完整内容 Key 与 Value。这样可以验证公式，却会重新产生较大的中间张量。
+
+教学代码采用吸收路径：
+
+- `key_up` 被移到当前 Query 一侧，得到 `q_absorbed`；
+- 注意力权重直接对 `latent_kv` 做加权求和；
+- `value_up` 只作用于聚合后的 `latent_context`。
+
+因此，历史 token 始终以低维潜在形式参与核心计算。这正是矩阵吸收与 KV 联合压缩配合后的意义。
+
+### 10.3 Prefill 与逐 token 解码示例
+
+```python
+torch.manual_seed(0)
+
+mla = EducationalMLA(
+    model_dim=512,
+    num_heads=8,
+    kv_rank=64,
+    content_dim=48,
+    rope_dim=16,
+    value_dim=64,
+)
+
+# Prefill：一次处理 12 个输入 token，并建立缓存。
+prompt = torch.randn(2, 12, 512)
+prompt_output, cache = mla(prompt)
+print(prompt_output.shape)       # torch.Size([2, 12, 512])
+print(cache.latent_kv.shape)     # torch.Size([2, 12, 64])
+print(cache.rope_key.shape)      # torch.Size([2, 12, 16])
+
+# Decode：输入一个新 token，复用并扩展历史缓存。
+next_token = torch.randn(2, 1, 512)
+next_output, cache = mla(next_token, cache)
+print(next_output.shape)         # torch.Size([2, 1, 512])
+print(cache.latent_kv.shape)     # torch.Size([2, 13, 64])
+print(cache.rope_key.shape)      # torch.Size([2, 13, 16])
+```
+
+这个例子也直观说明：MLA 的缓存仍然从 12 个 token 增长到 13 个 token，但每个 token 只新增 `kv_rank + rope_dim` 个缓存元素，而不是新增所有头的完整 Key 和 Value。
+
+### 10.4 与官方工程实现的区别
+
+这段代码用于理解核心数学，不应直接作为高性能推理内核。DeepSeek-V3 官方实现还包含或依赖：
+
+- Query 的可选低秩投影与 RMSNorm；
+- 模型并行和分布式权重切分；
+- FP8 权重量化与反量化；
+- 长上下文 RoPE 缩放；
+- 预分配缓存和更严格的 batch、位置管理；
+- 针对 GPU 的融合 Attention Kernel。
+
+官方实现中的优化分支与本文代码的核心对应关系是一致的：缓存低维 KV 表示和独立的位置 Key，把内容 Key 上投影吸收到 Query，并在潜在空间聚合后再使用 Value 上投影。
+
+---
+
+## 11. KV Cache 节省量
 
 传统 MHA 每个 token、每层需要缓存的元素数量约为：
 
@@ -399,9 +699,9 @@ $$\frac{576}{32768}\approx1.76\%$$
 
 ---
 
-## 11. MLA 没有解决的问题
+## 12. MLA 没有解决的问题
 
-### 11.1 缓存仍随序列长度增长
+### 12.1 缓存仍随序列长度增长
 
 MLA 并没有把整段历史压成一个固定向量。长度为 $L$ 时，缓存复杂度仍然是：
 
@@ -409,7 +709,7 @@ $$O\left(L(d_c+d_R)\right)$$
 
 它优化的是每个历史 token 需要保存多少信息，而不是消除历史 token 数量这一维度。
 
-### 11.2 全局注意力仍需访问历史 token
+### 12.2 全局注意力仍需访问历史 token
 
 MLA 仍属于全局 token 注意力。Prefill 阶段的基础注意力关系仍接近二次复杂度；解码阶段也仍需让当前 Query 访问历史 token 的潜在缓存。
 
@@ -420,7 +720,7 @@ MLA 仍属于全局 token 注意力。Prefill 阶段的基础注意力关系仍�
 - 支持更大的 batch 或更长上下文；
 - 为高吞吐推理释放显存空间。
 
-### 11.3 低秩表示存在信息瓶颈
+### 12.3 低秩表示存在信息瓶颈
 
 当 $d_c$ 远小于完整 Key、Value 总维度时，潜在空间构成了真实的信息瓶颈。MLA 并不是数学意义上的无损压缩。
 
@@ -434,7 +734,7 @@ DeepSeek-V2 的实验结果说明该结构在其训练配置中能够保持较�
 
 ---
 
-## 12. MLA 与 KDA 的关系
+## 13. MLA 与 KDA 的关系
 
 MLA 和 KDA 都在处理长序列效率问题，但它们保留历史信息的方式不同。
 
@@ -450,7 +750,7 @@ MLA 和 KDA 都在处理长序列效率问题，但它们保留历史信息的�
 
 ---
 
-## 13. 核心理解
+## 14. 核心理解
 
 MLA 不是简单地“把 KV 维度变小”，而是让三项设计共同工作：
 
@@ -470,7 +770,7 @@ $$\text{总注意力分数}=\text{潜在空间内容分数}+\text{RoPE 位置分
 
 ---
 
-## 14. 局限与待继续理解的问题
+## 15. 局限与待继续理解的问题
 
 - 潜在维度 $d_c$ 应如何选择，才能在模型质量和缓存效率之间达到最佳平衡？
 - 共享潜在空间中的信息是否会自然形成不同语义方向，不同头又如何产生分工？
