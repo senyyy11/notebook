@@ -122,11 +122,11 @@ $$L_{ij}=aS_{ij}=\frac{\hat v_i^\top\hat t_j}{\tau}$$
 
 其中：
 
-- $	au$ 是 temperature；
-- $alpha$ 是实际学习的对数尺度参数；
+- $\tau$ 是 temperature；
+- $\alpha$ 是实际学习的对数尺度参数；
 - 使用指数函数保证 $a$ 始终为正，不会把相似度排序反转。
 
-当 $	au$ 变小时，$a$ 变大，Softmax 更尖锐，模型更在意候选之间的细小排名差距，梯度通常也会更强；但过小的 temperature 会放大噪声、错误配对和难负样本的影响，降低训练稳定性。因此它不是单纯“越小越好”，而是在区分能力与稳定性之间调节训练压力。
+当 $\tau$ 变小时，$a$ 变大，Softmax 更尖锐，模型更在意候选之间的细小排名差距，梯度通常也会更强；但过小的 temperature 会放大噪声、错误配对和难负样本的影响，降低训练稳定性。因此它不是单纯“越小越好”，而是在区分能力与稳定性之间调节训练压力。
 
 原始 CLIP 将尺度初始化为 $1/0.07$ 附近并让其参与学习。实际实现常额外限制最大尺度，以避免极端 logits；这是数值稳定措施，不改变对比目标本身。
 
@@ -410,4 +410,3 @@ def zero_shot_predict(
 - Radford et al., 2021：[Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020)
 - OpenAI 官方介绍：[CLIP: Connecting text and images](https://openai.com/index/clip/)
 - OpenAI 官方代码：[openai/CLIP](https://github.com/openai/CLIP)
-
