@@ -601,51 +601,23 @@ $$\|x_t-\sqrt{\alpha_t}y\|^2=x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_t y^
 
 $$\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2=y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0$$
 
-下面把这两个平方一步一步代回去，不能直接跳到 $A_t$ 和 $B_t$。
-
-#### 第一步：解释为什么要取对数
-
-上一节的正比关系意味着存在某个与 $y$ 无关的正数 $K$，使得：
-
-$$q(y\mid x_t,x_0)=K\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
-
-两边取对数。利用 $\log(ab)=\log a+\log b$ 和 $\log(\exp u)=u$：
-
-$$\log q(y\mid x_t,x_0)=\log K-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}$$
-
-把与 $y$ 无关的 $\log K$ 暂记为 $C_0$：
+把与 $y$ 无关的对数常数记为 $C_0$，从下面的表达式开始收集各项：
 
 $$\log q(y\mid x_t,x_0)=C_0-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}$$
 
-取对数的作用只是把指数结构变成普通加减法，使二次项和线性项容易收集；它没有改变后验的均值和最大值位置。
+#### 第一步：把两个平方完整代回
 
-#### 第二步：把两个平方完整代回
-
-将刚才得到的两个平方展开式原样代入：
+将上面的两个平方展开式代入：
 
 $$\log q(y\mid x_t,x_0)=C_0-\frac{x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_ty^\top y}{2\beta_t}-\frac{y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0}{2(1-\bar\alpha_{t-1})}$$
 
-此时还没有丢掉任何一项。
+#### 第二步：逐项展开
 
-#### 第三步：把两个分母和外面的负号分配到每一项
-
-先展开第一个分式前面的负号：
-
-$$-\frac{x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_ty^\top y}{2\beta_t}=-\frac{x_t^\top x_t}{2\beta_t}+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y-\frac{\alpha_t}{2\beta_t}y^\top y$$
-
-中间项变成正号，是因为外面的负号与平方展开中的 $-2$ 相乘：
-
-$$-\frac{-2\sqrt{\alpha_t}x_t^\top y}{2\beta_t}=\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y$$
-
-第二个分式同理：
-
-$$-\frac{y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0}{2(1-\bar\alpha_{t-1})}=-\frac{y^\top y}{2(1-\bar\alpha_{t-1})}+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
-
-把两部分放回同一行：
+将分母和外面的负号分配到各项，得到：
 
 $$\log q(y\mid x_t,x_0)=C_0-\frac{x_t^\top x_t}{2\beta_t}+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y-\frac{\alpha_t}{2\beta_t}y^\top y-\frac{y^\top y}{2(1-\bar\alpha_{t-1})}+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
 
-#### 第四步：先收集与当前变量无关的常数项
+#### 第三步：先收集与当前变量无关的常数项
 
 当前待研究变量是 $y$。下面两项只含已经给定的 $x_t$、$x_0$ 和时间参数，因此不含 $y$：
 
@@ -661,7 +633,7 @@ $$C:=C_0-\frac{x_t^\top x_t}{2\beta_t}-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t
 
 $$\log q(y\mid x_t,x_0)=C-\frac{\alpha_t}{2\beta_t}y^\top y-\frac{1}{2(1-\bar\alpha_{t-1})}y^\top y+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y$$
 
-#### 第五步：收集所有二次项
+#### 第四步：收集所有二次项
 
 含 $y^\top y$ 的两项是：
 
@@ -681,7 +653,7 @@ $$-\frac{A_t}{2}y^\top y$$
 
 这里 $A_t$ 是标量精度系数。因为当前两个高斯的协方差都是某个标量乘 $I$，所以二次项只需要一个标量 $A_t$；若使用一般协方差，当前位置会出现精度矩阵。
 
-#### 第六步：收集所有线性项
+#### 第五步：收集所有线性项
 
 两个线性项是：
 
@@ -699,7 +671,7 @@ $$B_t:=\frac{\sqrt{\alpha_t}}{\beta_t}x_t+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\
 
 $$B_t^\top y$$
 
-#### 第七步：合并二次项和线性项
+#### 第六步：合并二次项和线性项
 
 到这里，表达式已经变成：
 
