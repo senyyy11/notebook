@@ -478,7 +478,7 @@ $$q(x_t\mid y)=\mathcal N\bigl(x_t;\sqrt{\alpha_t}y,\beta_t I\bigr)$$
 
 $$q(y\mid x_0)=\mathcal N\bigl(y;\sqrt{\bar\alpha_{t-1}}x_0,(1-\bar\alpha_{t-1})I\bigr)$$
 
-下面不直接跳到正比式，而是从多元高斯密度的完整表达式开始代入。
+从多元高斯密度的完整表达式开始代入。
 
 #### 第一步：写出多元高斯密度公式
 
@@ -601,15 +601,125 @@ $$\|x_t-\sqrt{\alpha_t}y\|^2=x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_t y^
 
 $$\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2=y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0$$
 
-$x_t^\top x_t$ 与 $x_0^\top x_0$ 不含 $y$，所以它们只改变归一化常数，不改变后验关于 $y$ 的均值和方差。收集 $y^\top y$ 与线性项：
+下面把这两个平方一步一步代回去，不能直接跳到 $A_t$ 和 $B_t$。
+
+#### 第一步：解释为什么要取对数
+
+上一节的正比关系意味着存在某个与 $y$ 无关的正数 $K$，使得：
+
+$$q(y\mid x_t,x_0)=K\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
+
+两边取对数。利用 $\log(ab)=\log a+\log b$ 和 $\log(\exp u)=u$：
+
+$$\log q(y\mid x_t,x_0)=\log K-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}$$
+
+把与 $y$ 无关的 $\log K$ 暂记为 $C_0$：
+
+$$\log q(y\mid x_t,x_0)=C_0-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}$$
+
+取对数的作用只是把指数结构变成普通加减法，使二次项和线性项容易收集；它没有改变后验的均值和最大值位置。
+
+#### 第二步：把两个平方完整代回
+
+将刚才得到的两个平方展开式原样代入：
+
+$$\log q(y\mid x_t,x_0)=C_0-\frac{x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_ty^\top y}{2\beta_t}-\frac{y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0}{2(1-\bar\alpha_{t-1})}$$
+
+此时还没有丢掉任何一项。
+
+#### 第三步：把两个分母和外面的负号分配到每一项
+
+先展开第一个分式前面的负号：
+
+$$-\frac{x_t^\top x_t-2\sqrt{\alpha_t}x_t^\top y+\alpha_ty^\top y}{2\beta_t}=-\frac{x_t^\top x_t}{2\beta_t}+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y-\frac{\alpha_t}{2\beta_t}y^\top y$$
+
+中间项变成正号，是因为外面的负号与平方展开中的 $-2$ 相乘：
+
+$$-\frac{-2\sqrt{\alpha_t}x_t^\top y}{2\beta_t}=\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y$$
+
+第二个分式同理：
+
+$$-\frac{y^\top y-2\sqrt{\bar\alpha_{t-1}}x_0^\top y+\bar\alpha_{t-1}x_0^\top x_0}{2(1-\bar\alpha_{t-1})}=-\frac{y^\top y}{2(1-\bar\alpha_{t-1})}+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
+
+把两部分放回同一行：
+
+$$\log q(y\mid x_t,x_0)=C_0-\frac{x_t^\top x_t}{2\beta_t}+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y-\frac{\alpha_t}{2\beta_t}y^\top y-\frac{y^\top y}{2(1-\bar\alpha_{t-1})}+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
+
+#### 第四步：先收集与当前变量无关的常数项
+
+当前待研究变量是 $y$。下面两项只含已经给定的 $x_t$、$x_0$ 和时间参数，因此不含 $y$：
+
+$$-\frac{x_t^\top x_t}{2\beta_t},\qquad -\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
+
+将它们连同 $C_0$ 合并成一个新的常数 $C$：
+
+$$C:=C_0-\frac{x_t^\top x_t}{2\beta_t}-\frac{\bar\alpha_{t-1}}{2(1-\bar\alpha_{t-1})}x_0^\top x_0$$
+
+这里并不是把这两项设为零，而只是重新命名。它们会影响完整密度的归一化数值，但不会影响关于 $y$ 的二次曲线中心和宽度。
+
+去掉已经并入 $C$ 的两项后：
+
+$$\log q(y\mid x_t,x_0)=C-\frac{\alpha_t}{2\beta_t}y^\top y-\frac{1}{2(1-\bar\alpha_{t-1})}y^\top y+\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y$$
+
+#### 第五步：收集所有二次项
+
+含 $y^\top y$ 的两项是：
+
+$$-\frac{\alpha_t}{2\beta_t}y^\top y-\frac{1}{2(1-\bar\alpha_{t-1})}y^\top y$$
+
+提取公共因子 $-\frac12y^\top y$：
+
+$$-\frac{1}{2}\left(\frac{\alpha_t}{\beta_t}+\frac{1}{1-\bar\alpha_{t-1}}\right)y^\top y$$
+
+因此定义标量：
+
+$$A_t:=\frac{\alpha_t}{\beta_t}+\frac{1}{1-\bar\alpha_{t-1}}$$
+
+二次项便可写为：
+
+$$-\frac{A_t}{2}y^\top y$$
+
+这里 $A_t$ 是标量精度系数。因为当前两个高斯的协方差都是某个标量乘 $I$，所以二次项只需要一个标量 $A_t$；若使用一般协方差，当前位置会出现精度矩阵。
+
+#### 第六步：收集所有线性项
+
+两个线性项是：
+
+$$\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y$$
+
+利用向量分配律，可以把它们写成一个向量与 $y$ 的内积：
+
+$$\frac{\sqrt{\alpha_t}}{\beta_t}x_t^\top y+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0^\top y=\left(\frac{\sqrt{\alpha_t}}{\beta_t}x_t+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0\right)^\top y$$
+
+因此定义向量：
+
+$$B_t:=\frac{\sqrt{\alpha_t}}{\beta_t}x_t+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0$$
+
+线性项便是：
+
+$$B_t^\top y$$
+
+#### 第七步：合并二次项和线性项
+
+到这里，表达式已经变成：
+
+$$\log q(y\mid x_t,x_0)=C-\frac{A_t}{2}y^\top y+B_t^\top y$$
+
+为了下一步完成平方，把最后两项统一放进 $-\frac12$ 中。注意：
+
+$$-\frac{1}{2}\left(-2B_t^\top y\right)=B_t^\top y$$
+
+因此：
 
 $$\log q(y\mid x_t,x_0)=C-\frac{1}{2}\left[A_ty^\top y-2B_t^\top y\right]$$
 
-其中 $C$ 与 $y$ 无关，而：
+所以红框中的形式并不是一个新的概率结论，而只是把同一个二次多项式重新组织成适合配方的记号。各对象的维度为：$C$ 是标量，$A_t$ 是标量，$y^\top y$ 是标量，$B_t\in\mathbb R^d$，$B_t^\top y$ 也是标量。
 
-$$A_t=\frac{\alpha_t}{\beta_t}+\frac{1}{1-\bar\alpha_{t-1}}$$
+特意保留 $-2B_t^\top y$ 的原因，是下一步将使用：
 
-$$B_t=\frac{\sqrt{\alpha_t}}{\beta_t}x_t+\frac{\sqrt{\bar\alpha_{t-1}}}{1-\bar\alpha_{t-1}}x_0$$
+$$A_t\left\|y-\frac{B_t}{A_t}\right\|^2=A_ty^\top y-2B_t^\top y+\frac{B_t^\top B_t}{A_t}$$
+
+这样可以直接读出平方中心为 $B_t/A_t$。
 
 ### 完成平方
 
