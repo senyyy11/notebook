@@ -6,7 +6,6 @@
 
 ## 资料与范围
 
-- 学习材料：[与 ChatGPT 的 DDPM 学习对话](https://chatgpt.com/share/6a8fefe7-9a60-83e8-8013-f69e0d67e002)
 - 原始论文：Jonathan Ho, Ajay Jain, Pieter Abbeel, [Denoising Diffusion Probabilistic Models](https://arxiv.org/abs/2006.11239), NeurIPS 2020
 - 本文只解释 DDPM 的概率模型、前向过程、反向过程、ELBO 与训练/采样算法。
 
@@ -1005,20 +1004,27 @@ $L_{\mathrm{simple}}$ 去掉了完整变分目标中随时间变化的权重。�
 
 对应的伪代码为：
 
-```text
-repeat
-    x0  <- sample_data()
-    t   <- random_integer(1, T)
-    eps <- standard_normal(shape(x0))
+```python
+def train_ddpm(num_training_steps):
+    for step in range(num_training_steps):
+        x_0 = sample_from_dataset()
+        t = random_integer_inclusive(1, T)
+        epsilon = standard_normal_like(x_0)
 
-    xt <- sqrt(alpha_bar[t]) * x0
-          + sqrt(1 - alpha_bar[t]) * eps
+        x_t = (
+            sqrt(alpha_bar[t]) * x_0
+            + sqrt(1 - alpha_bar[t]) * epsilon
+        )
 
-    eps_pred <- network(xt, t)
-    loss <- mean_squared_error(eps, eps_pred)
-    update_theta(loss)
-until convergence
+        epsilon_pred = epsilon_theta(x_t, t)
+        loss = mean((epsilon - epsilon_pred) ** 2)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 ```
+
+这段代码是接近 Python 书写习惯的伪代码，省略了批次维度、时间嵌入的具体实现和框架接口，重点只对应 DDPM 的训练数据流。
 
 网络学习的是“给定当前带噪状态和噪声等级，估计产生该状态的等价噪声”。时间步 $t$ 必须作为条件输入，因为相同的像素值在不同噪声强度下应采用不同的去噪策略。
 
@@ -1034,27 +1040,38 @@ $$\mu_\theta(x_t,t)=\frac{1}{\sqrt{\alpha_t}}\left(x_t-\frac{\beta_t}{\sqrt{1-\b
 
 再从模型反向条件分布采样：
 
-$$x_{t-1}=\mu_\theta(x_t,t)+\sigma_tz,qquad z\sim\mathcal N(0,I)$$
+$$x_{t-1}=\mu_\theta(x_t,t)+\sigma_tz$$
+
+其中随机噪声满足：
+
+$$z\sim\mathcal N(0,I)$$
 
 在最后一步通常不再额外注入随机噪声，即令 $t=1$ 时的 $z=0$。伪代码为：
 
-```text
-x <- standard_normal(data_shape)
+```python
+def sample_ddpm(data_shape):
+    x_t = standard_normal(data_shape)
 
-for t = T, T-1, ..., 1
-    eps_pred <- network(x, t)
-    mean <- (x - beta[t] / sqrt(1 - alpha_bar[t]) * eps_pred)
-            / sqrt(alpha[t])
+    for t in range(T, 0, -1):
+        epsilon_pred = epsilon_theta(x_t, t)
 
-    if t > 1
-        z <- standard_normal(shape(x))
-    else
-        z <- 0
+        mean = (
+            x_t
+            - beta[t] / sqrt(1 - alpha_bar[t]) * epsilon_pred
+        ) / sqrt(alpha[t])
 
-    x <- mean + sigma[t] * z
+        if t > 1:
+            z = standard_normal_like(x_t)
+        else:
+            z = zeros_like(x_t)
 
-return x
+        # 更新后，变量中保存的是下一时刻的 x_{t-1}
+        x_t = mean + sigma[t] * z
+
+    return x_t
 ```
+
+这里仍是强调公式对应关系的伪代码，不代表某个深度学习框架的可直接运行实现。
 
 这里的随机项并非“模型又把刚去掉的噪声加回去”。它来自模型对 $p_\theta(x_{t-1}\mid x_t)$ 的概率分布建模，用来表达同一个 $x_t$ 可能对应多个合理的较干净状态。
 
