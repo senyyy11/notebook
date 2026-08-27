@@ -80,15 +80,185 @@ $$\bar\alpha_t=\alpha_t\bar\alpha_{t-1}$$
 
 ## 预备数学二：高斯变量的仿射变换
 
-若 $z\sim\mathcal N(0,I)$，则：
+这一节要回答的不是“记住一个结论”，而是四个更具体的问题：
+
+1. 为什么 $z$ 经过线性变换和整体平移以后仍然是高斯变量？
+2. 为什么新变量的均值是 $\mu$？
+3. 为什么新变量的协方差是 $LL^\top$，而不是简单的 $L$？
+4. 为什么 DDPM 公式里噪声前面乘的是标准差的平方根？
+
+### 先固定符号和维度
+
+设：
+
+- $z\in\mathbb R^k$ 是标准多元高斯随机变量；
+- $z\sim\mathcal N(0,I_k)$ 表示 $\mathbb E[z]=0$、$\mathrm{Cov}(z)=I_k$；
+- $L\in\mathbb R^{d\times k}$ 是一个确定的矩阵；
+- $\mu\in\mathbb R^d$ 是一个确定的平移向量；
+- $x\in\mathbb R^d$ 由 $x=\mu+Lz$ 定义。
+
+维度可以直接检查：
+
+$$Lz\in\mathbb R^d,\qquad \mu+Lz\in\mathbb R^d$$
+
+因此 $x$ 与 $\mu$ 都是 $d$ 维向量，而 $x$ 的协方差必须是 $d\times d$ 矩阵。$LL^\top$ 的维度恰好是：
+
+$$LL^\top\in\mathbb R^{d\times k}\mathbb R^{k\times d}=\mathbb R^{d\times d}$$
+
+### 为什么变换后仍然是高斯变量
+
+先看一维直觉。若 $z\sim\mathcal N(0,1)$，那么：
+
+$$x=\mu+\sigma z$$
+
+只是对高斯曲线做两件事：乘 $\sigma$ 会拉伸或压缩横轴，加 $\mu$ 会把整条曲线平移到以 $\mu$ 为中心的位置。这两种操作都不会把钟形曲线变成另一类分布。
+
+多维情形可以用多元高斯的一个等价定义严格说明：如果对任意确定向量 $a\in\mathbb R^d$，标量 $a^\top x$ 都服从一维高斯分布，那么 $x$ 就是多元高斯变量。
+
+对 $x=\mu+Lz$ 做任意线性投影：
+
+$$a^\top x=a^\top\mu+a^\top Lz=a^\top\mu+(L^\top a)^\top z$$
+
+$L^\top a$ 是一个确定向量，而标准多元高斯 $z$ 的任意线性组合仍是一维高斯。因此 $a^\top x$ 对任意 $a$ 都是一维高斯，进而 $x$ 是多元高斯。
+
+这一步证明了“类型没有改变”，接下来再分别计算它的均值和协方差。
+
+### 为什么均值变成了平移量
+
+从定义开始：
+
+$$x=\mu+Lz$$
+
+两边取期望。期望具有线性性质，而且 $\mu$、$L$ 都是确定量：
+
+$$\mathbb E[x]=\mathbb E[\mu+Lz]=\mu+L\mathbb E[z]$$
+
+标准高斯的均值是零，即 $\mathbb E[z]=0$，所以：
+
+$$\mathbb E[x]=\mu+L\cdot0=\mu$$
+
+直觉上，$Lz$ 仍然以零为中心；加上 $\mu$ 后，整个随机云团的中心被平移到了 $\mu$。
+
+### 为什么协方差是矩阵乘积
+
+协方差的定义为：
+
+$$\mathrm{Cov}(x)=\mathbb E\left[(x-\mathbb E[x])(x-\mathbb E[x])^\top\right]$$
+
+刚刚已经得到 $\mathbb E[x]=\mu$，所以：
+
+$$x-\mathbb E[x]=x-\mu=Lz$$
+
+代回协方差定义：
+
+$$\mathrm{Cov}(x)=\mathbb E\left[(Lz)(Lz)^\top\right]$$
+
+转置乘积满足 $(Lz)^\top=z^\top L^\top$，因此：
+
+$$\mathrm{Cov}(x)=\mathbb E\left[Lzz^\top L^\top\right]$$
+
+$L$ 和 $L^\top$ 不是随机变量，可以移到期望外面：
+
+$$\mathrm{Cov}(x)=L\mathbb E[zz^\top]L^\top$$
+
+因为 $z$ 的均值为零，所以它的二阶矩就是协方差：
+
+$$\mathbb E[zz^\top]=\mathrm{Cov}(z)=I_k$$
+
+于是：
+
+$$\mathrm{Cov}(x)=LI_kL^\top=LL^\top$$
+
+最终得到完整分布：
 
 $$x=\mu+Lz\sim\mathcal N(\mu,LL^\top)$$
 
-特别地，若 $L=\sigma I$，则：
+这里不能把协方差直接写成 $L$，至少有三个原因：
 
-$$x=\mu+\sigma z\sim\mathcal N(\mu,\sigma^2 I)$$
+- $L$ 不一定是方阵，而协方差一定是 $d\times d$ 方阵；
+- 协方差矩阵必须对称，而一般的 $L$ 不一定对称；
+- 随机变量的缩放系数作用在“标准差”上，方差会按照系数的平方缩放。
 
-这就是“分布式”与“采样式”之间的桥梁。
+若 $L$ 的秩小于 $d$，则 $LL^\top$ 是半正定但不可逆的，此时得到的是退化高斯分布：随机样本只落在某个低维子空间中。DDPM 的单步噪声矩阵通常是正数乘单位矩阵，不会遇到这个退化问题。
+
+### 特殊情况：各方向使用相同噪声尺度
+
+现在令 $k=d$，并取：
+
+$$L=\sigma I_d$$
+
+这里通常约定 $\sigma\geq0$，它表示每个坐标方向上的标准差。将它代入协方差：
+
+$$LL^\top=(\sigma I_d)(\sigma I_d)^\top$$
+
+单位矩阵转置后不变，即 $I_d^\top=I_d$，所以：
+
+$$LL^\top=(\sigma I_d)(\sigma I_d)=\sigma^2I_d$$
+
+因此：
+
+$$x=\mu+\sigma z\sim\mathcal N(\mu,\sigma^2I_d)$$
+
+注意：采样式里的系数是标准差 $\sigma$，分布式协方差里的系数是方差 $\sigma^2$。平方正是从 $(\sigma z)(\sigma z)^\top$ 中产生的。
+
+### 用一维数字例子检查
+
+设：
+
+$$z\sim\mathcal N(0,1),\qquad x=2+3z$$
+
+均值为：
+
+$$\mathbb E[x]=2+3\mathbb E[z]=2$$
+
+方差为：
+
+$$\mathrm{Var}(x)=\mathrm{Var}(3z)=3^2\mathrm{Var}(z)=9$$
+
+因此：
+
+$$x\sim\mathcal N(2,9)$$
+
+这里的 $3$ 是标准差，$9$ 才是方差。比如一次采样得到 $z=0.5$ 时，会算出一个具体取值 $x=3.5$；但“$x\sim\mathcal N(2,9)$”描述的是反复采样所形成的整体分布，不是在说单个数值 $3.5$ 本身是一个分布。
+
+### 对应到 DDPM 的单步加噪
+
+DDPM 的单步条件分布是：
+
+$$q(x_t\mid x_{t-1})=\mathcal N\bigl(x_t;\sqrt{\alpha_t}x_{t-1},\beta_tI\bigr)$$
+
+在这个条件分布中，一旦给定 $x_{t-1}$，就暂时把它看成确定值。因此可以逐项对应：
+
+| 仿射变换通式 | DDPM 单步加噪中的对象 |
+|---|---|
+| $z$ | $\epsilon_t\sim\mathcal N(0,I)$ |
+| $\mu$ | $\sqrt{\alpha_t}x_{t-1}$ |
+| $L$ | $\sqrt{\beta_t}I$ |
+| $LL^\top$ | $\beta_tI$ |
+
+因为：
+
+$$LL^\top=(\sqrt{\beta_t}I)(\sqrt{\beta_t}I)^\top=\beta_tI$$
+
+所以对应的采样式必须写为：
+
+$$x_t=\sqrt{\alpha_t}x_{t-1}+\sqrt{\beta_t}\epsilon_t$$
+
+为什么噪声前面是 $\sqrt{\beta_t}$ 而不是 $\beta_t$？因为条件分布要求噪声方差为 $\beta_tI$。若错误地写成 $\beta_t\epsilon_t$，实际协方差会变成：
+
+$$\mathrm{Cov}(\beta_t\epsilon_t)=\beta_t^2I$$
+
+这就不再等于目标中的 $\beta_tI$。
+
+同理，前向闭式分布：
+
+$$q(x_t\mid x_0)=\mathcal N\bigl(x_t;\sqrt{\bar\alpha_t}x_0,(1-\bar\alpha_t)I\bigr)$$
+
+对应的采样式为：
+
+$$x_t=\sqrt{\bar\alpha_t}x_0+\sqrt{1-\bar\alpha_t}\epsilon$$
+
+这就是“分布式”与“采样式”之间完整的桥梁：先从目标协方差中找出一个矩阵平方根 $L$，再对标准高斯噪声做 $Lz$ 变换并加上目标均值。
 
 ## 预备数学三：独立高斯噪声为何能够合并
 
