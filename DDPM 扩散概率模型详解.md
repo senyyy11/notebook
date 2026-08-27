@@ -478,9 +478,118 @@ $$q(x_t\mid y)=\mathcal N\bigl(x_t;\sqrt{\alpha_t}y,\beta_t I\bigr)$$
 
 $$q(y\mid x_0)=\mathcal N\bigl(y;\sqrt{\bar\alpha_{t-1}}x_0,(1-\bar\alpha_{t-1})I\bigr)$$
 
-忽略高斯密度前面与 $y$ 无关的归一化系数，只保留指数中依赖 $y$ 的部分：
+下面不直接跳到正比式，而是从多元高斯密度的完整表达式开始代入。
+
+#### 第一步：写出多元高斯密度公式
+
+若 $u\in\mathbb R^d$ 且：
+
+$$u\sim\mathcal N(m,\Sigma)$$
+
+那么 $u$ 的概率密度为：
+
+$$\mathcal N(u;m,\Sigma)=\frac{1}{(2\pi)^{d/2}|\Sigma|^{1/2}}\exp\left[-\frac{1}{2}(u-m)^\top\Sigma^{-1}(u-m)\right]$$
+
+如果协方差是各向同性形式 $\Sigma=s^2I$，则：
+
+$$|s^2I|=(s^2)^d,\qquad (s^2I)^{-1}=\frac{1}{s^2}I$$
+
+所以密度简化为：
+
+$$\mathcal N(u;m,s^2I)=\frac{1}{(2\pi s^2)^{d/2}}\exp\left[-\frac{\|u-m\|^2}{2s^2}\right]$$
+
+这个公式由两部分组成：
+
+- 前面的 $1/(2\pi s^2)^{d/2}$ 是归一化系数，保证密度对变量 $u$ 的积分等于 1；
+- 后面的指数项决定密度随 $u$ 如何变化。
+
+归一化系数只由维度 $d$ 和协方差 $s^2I$ 决定，不依赖均值 $m$。移动高斯分布的中心不会改变曲线下面积，因此归一化系数不需要随均值变化。
+
+#### 第二步：展开第一个高斯因子
+
+第一个因子是：
+
+$$q(x_t\mid y)=\mathcal N\bigl(x_t;\sqrt{\alpha_t}y,\beta_tI\bigr)$$
+
+在通用公式中逐项对应：
+
+$$u=x_t,\qquad m=\sqrt{\alpha_t}y,\qquad s^2=\beta_t$$
+
+代入完整密度公式：
+
+$$q(x_t\mid y)=\frac{1}{(2\pi\beta_t)^{d/2}}\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}\right]$$
+
+这里均值 $\sqrt{\alpha_t}y$ 确实依赖 $y$，所以指数项依赖 $y$；但归一化系数：
+
+$$K_1:=\frac{1}{(2\pi\beta_t)^{d/2}}$$
+
+只含 $d$ 和 $\beta_t$，不含 $y$。因此在研究整个表达式随 $y$ 的变化时，$K_1$ 是常数。
+
+还要注意：$q(x_t\mid y)$ 原本是关于 $x_t$ 归一化的条件密度。现在将已观测的 $x_t$ 固定、把它看成 $y$ 的函数时，它本身不要求对 $y$ 的积分等于 1；真正关于 $y$ 的归一化会由完整的 Bayes 公式保证。
+
+#### 第三步：展开第二个高斯因子
+
+第二个因子是：
+
+$$q(y\mid x_0)=\mathcal N\bigl(y;\sqrt{\bar\alpha_{t-1}}x_0,(1-\bar\alpha_{t-1})I\bigr)$$
+
+这次对应关系为：
+
+$$u=y,\qquad m=\sqrt{\bar\alpha_{t-1}}x_0,\qquad s^2=1-\bar\alpha_{t-1}$$
+
+代入后得到：
+
+$$q(y\mid x_0)=\frac{1}{\left[2\pi(1-\bar\alpha_{t-1})\right]^{d/2}}\exp\left[-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
+
+把第二个归一化系数记为：
+
+$$K_2:=\frac{1}{\left[2\pi(1-\bar\alpha_{t-1})\right]^{d/2}}$$
+
+$K_2$ 同样不含 $y$。
+
+#### 第四步：代回完整 Bayes 公式
+
+前面已经得到严格等式：
+
+$$q(y\mid x_t,x_0)=\frac{q(x_t\mid y)q(y\mid x_0)}{q(x_t\mid x_0)}$$
+
+在当前推导中，$x_t$ 和 $x_0$ 都已经给定，因此分母 $q(x_t\mid x_0)$ 也不随 $y$ 改变。记：
+
+$$K_0:=\frac{1}{q(x_t\mid x_0)}$$
+
+将两个完整高斯密度代入，暂时保留所有系数：
+
+$$q(y\mid x_t,x_0)=K_0K_1K_2\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}\right]\exp\left[-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
+
+使用指数乘法规则：
+
+$$\exp(A)\exp(B)=\exp(A+B)$$
+
+得到仍然保持严格相等的表达式：
+
+$$q(y\mid x_t,x_0)=K_0K_1K_2\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
+
+#### 第五步：从严格等号变成正比号
+
+现在定义：
+
+$$K:=K_0K_1K_2$$
+
+$K$ 可能依赖 $x_t,x_0,t$ 和噪声日程，但不依赖当前待研究变量 $y$。因此：
+
+$$q(y\mid x_t,x_0)=K\cdot f(y)$$
+
+如果当前目的只是通过配方找出后验关于 $y$ 的均值和协方差，就可以暂时不计算这个整体常数，写成：
 
 $$q(y\mid x_t,x_0)\propto\exp\left[-\frac{\|x_t-\sqrt{\alpha_t}y\|^2}{2\beta_t}-\frac{\|y-\sqrt{\bar\alpha_{t-1}}x_0\|^2}{2(1-\bar\alpha_{t-1})}\right]$$
+
+所以这里的 $\propto$ 精确表示：左右两边只相差一个与 $y$ 无关的正数 $K$，而不是把若干项近似为零，也不是认为这些归一化系数在数值上等于 1。
+
+后面完成平方后，我们会识别出这个核对应均值 $B_t/A_t$、协方差 $A_t^{-1}I$ 的高斯分布。届时完整的、关于 $y$ 归一化的密度可以重新写为：
+
+$$q(y\mid x_t,x_0)=\frac{A_t^{d/2}}{(2\pi)^{d/2}}\exp\left[-\frac{A_t}{2}\left\|y-\frac{B_t}{A_t}\right\|^2\right]$$
+
+因此，暂时省略常数只是为了更容易识别分布形状；完整后验仍然必须归一化。
 
 ### 逐项展开平方
 
