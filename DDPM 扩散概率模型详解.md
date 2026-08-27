@@ -685,7 +685,7 @@ $$-\frac{1}{2}\left(-2B_t^\top y\right)=B_t^\top y$$
 
 $$\log q(y\mid x_t,x_0)=C-\frac{1}{2}\left[A_ty^\top y-2B_t^\top y\right]$$
 
-所以红框中的形式并不是一个新的概率结论，而只是把同一个二次多项式重新组织成适合配方的记号。各对象的维度为：$C$ 是标量，$A_t$ 是标量，$y^\top y$ 是标量，$B_t\in\mathbb R^d$，$B_t^\top y$ 也是标量。
+各对象的维度为：$C$ 是标量，$A_t$ 是标量，$y^\top y$ 是标量，$B_t\in\mathbb R^d$，$B_t^\top y$ 也是标量。
 
 特意保留 $-2B_t^\top y$ 的原因，是下一步将使用：
 
