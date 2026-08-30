@@ -106,7 +106,7 @@ Context
 
 两者相关，但不是同一个职责。
 
-### 3.2 Service：具名、可替换、具有生命周期的能力
+### 3.2 Service：工具名、可替换、具有生命周期的能力
 
 Service 不是单纯放进 Map 的对象，而是一个插件向 Context 提供的具名能力。在 Harness 中，`tools`、`llm`、`agents` 等都是 Service。
 
