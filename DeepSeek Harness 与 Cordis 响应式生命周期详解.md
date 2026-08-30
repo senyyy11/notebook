@@ -14,15 +14,27 @@
 > [!important]
 > 这里的 Harness 指 DeepSeek 开源的 Agent Harness，而不是 DeepSeek 模型本身的注意力结构或推理算法。本文讨论的是它底层 Cordis 插件运行时的组合、依赖与生命周期管理。
 
-## 一、这轮学习真正解决了什么问题
+## 一、问题背景：动态 Agent Runtime 为什么需要生命周期管理
 
-共享对话围绕一个很具体的疑问展开：插件卸载时为什么不会把已经注册的 Tool、事件监听器、定时器或 Service 留在系统里？Cordis 是否会在“安装插件”时同步记录“如何删除插件”？所谓“执行一个副作用，再加入 Tool A”究竟是什么意思？
+DeepSeek Harness 不是一个只在启动时装配一次、随后结构保持不变的普通程序。它允许模型适配器、Tool、Session、Agent Loop、Sandbox 等能力以插件形式组合；运行期间还可能发生配置修改、Provider 替换、子 Agent 创建与结束以及插件热更新。
 
-结论可以先压缩为一句话：
+这会带来两个彼此关联的问题。
 
-> Cordis 不只是记录“如何删除整个插件”，而是在某次插件运行对应的 Fiber 中，持续收集这次运行创建的每一个可撤销 Effect；Fiber 失效或被卸载时，运行时调用这些 Effect 的 disposer，并递归清理子 Fiber。
+第一个问题是**依赖何时满足**。例如 Agent Plugin 依赖 LLM Service：如果 LLM 尚未加载，Agent 不应提前运行；如果 LLM 在运行期间消失，Agent 也不应继续持有旧实例。
 
-因此，关键不是一份静态的“插件卸载脚本”，而是一个运行时维护的生命周期结构：
+第二个问题是**插件创建的外部状态如何撤销**。Agent 启动时可能注册 Tool、添加事件监听器、开启定时器或创建子插件。如果 Agent 已经停止，而这些状态仍留在系统里，就会形成幽灵 Tool、重复监听器、泄漏的定时器或孤儿子插件。
+
+因此，一个动态 Harness 不能只回答“如何调用插件的 `apply()`”，还必须回答：
+
+```text
+插件什么时候可以启动？
+依赖变化时，哪些插件需要停止或重启？
+某次运行创建了哪些外部状态？
+停止时，如何完整撤销这些状态？
+父插件消失时，子插件如何一起退出？
+```
+
+Cordis 的解决方案不是给每个插件维护一份静态的“卸载脚本”，而是把依赖、一次插件运行和可撤销操作组织成一个运行时闭环：
 
 ```text
 Context 中的 Service 状态
@@ -36,9 +48,35 @@ Fiber 应处于什么状态
 Effects 又可能改变 Context 中的 Service 状态
 ```
 
-这是一台动态状态机，而不是五个互不相关的 API。
+本文接下来先用一个贯穿示例观察这个闭环，再分别解释 Context、Service、inject、Fiber 与 Effect。
 
 ## 二、先建立总图：两个相反方向的传播链
+
+先假设系统里有两个插件：
+
+- `LLMPlugin` 是 Provider，向 Context 提供名为 `llm` 的 Service。
+- `AgentPlugin` 是 Consumer，通过 `inject = ['llm', 'tools']` 声明必需依赖；启动后注册一个模型可调用的 Tool，并开启一个 heartbeat timer。
+
+我们希望运行时自动保证：
+
+```text
+llm 不存在
+→ AgentPlugin 不启动
+
+llm 出现
+→ AgentPlugin 启动
+→ Tool 与 timer 建立
+
+llm 消失
+→ AgentPlugin 停止
+→ Tool 被注销，timer 被清除
+
+llm 再次出现
+→ AgentPlugin 重新运行
+→ 使用新的 llm 实例建立一套新状态
+```
+
+下面的图展示的正是这个一般化过程。图中的 Provider 可以是 LLM Provider，也可以是 Shell、Storage 或其他 Service Provider；Consumer 则是任何把该 Service 声明为必需依赖的插件。
 
 ![Cordis 响应式生命周期闭环](assets/deepseek-harness/cordis-reactive-lifecycle.png)
 
@@ -209,39 +247,70 @@ run disposer
 
 Cordis 已经管理的注册通常本身就是 Effect，例如 Service 注册、`ctx.on()`、`ctx.plugin(child)`，以及 Harness 的 Tool 注册。只有 Cordis 不认识的外部资源，才需要插件作者显式包进 `ctx.effect()`。
 
-## 四、直接回答“副作用 + Tool A”是什么意思
+## 四、贯穿示例：Agent Plugin 的一次完整运行
 
-假设插件执行：
+现在把前面的五个概念放回第二节的场景。下面的 Agent 同时依赖 `llm` 和 `tools`，启动后注册一个 `ask_llm` Tool，并建立一个 heartbeat timer：
 
 ```ts
-export const inject = ['llm']
+export const inject = ['llm', 'tools']
 
 export function apply(ctx: Context) {
-  ctx.tools.register(toolA)
+  const llm = ctx.llm
+
+  ctx.tools.register({
+    name: 'ask_llm',
+    async execute(prompt: string) {
+      return llm.generate(prompt)
+    },
+  })
+
+  ctx.effect(() => {
+    const timer = setInterval(() => console.log('heartbeat'), 1000)
+    return () => clearInterval(timer)
+  })
 }
 ```
 
-“执行一个副作用 + Tool A”真正表达的是：
+这段代码应按生命周期顺序理解。
 
-1. `apply()` 在外部 Tool Registry 中加入了 `toolA`。
-2. 这个注册动作不是只返回一个永久存在的对象，而是有对应的撤销动作。
-3. Cordis/Harness 把该注册的 disposer 归属于当前 Fiber。
-4. 当 `llm` 消失使该 Fiber 卸载，或插件被配置移除、热更新、显式 `dispose()` 时，运行时会撤销 `toolA`。
+### 4.1 依赖尚未满足
 
-概念上等价于：
+Cordis 为 `AgentPlugin` 创建 Fiber，但如果 `llm` 或 `tools` 中任意一项不存在，Fiber 就保持 PENDING。此时 `apply()` 根本不会执行，因此 Tool 和 timer 都尚未建立。
 
-```ts
-ctx.effect(() => {
-  const unregister = registerTool(toolA)
-  return () => unregister()
-})
+### 4.2 依赖满足并开始加载
+
+当两个 Service 都可用时，Fiber 从 PENDING 进入 LOADING，`apply()` 开始执行。`const llm = ctx.llm` 取得当前作用域中解析到的 LLM 实例。
+
+接着，`ctx.tools.register(...)` 把 `ask_llm` 加入 Tool Registry。这是一次外部状态变化，但 Harness 的 Tool Registry 已经把注册设计成 Cordis 管理的 Effect：注册所对应的撤销逻辑会归属于当前 Fiber。因此这里不需要为了“可清理”而再机械地套一层 `ctx.effect()`。
+
+timer 不属于 Cordis 的内置注册 API，所以插件显式使用 `ctx.effect()` 配对建立与清理动作：
+
+```text
+setInterval()  →  clearInterval()
 ```
 
-但如果 `ctx.tools.register()` 本身已经是 Cordis 管理的注册 API，就不应再机械地套一层重复 Effect；调用该 API 时，返回的 disposer 已经会附着到当前插件的 Fiber。
+`apply()` 成功结束后，Fiber 进入 ACTIVE。此时这次 Fiber 运行所拥有的状态可以概念化为：
 
-所以，Cordis 记录的不是“Tool A 的删除说明文档”，而是这次真实注册所返回的可执行撤销函数，以及它属于哪个 Fiber。
+```text
+Agent Fiber ACTIVE
+├── 使用当前 llm Service
+├── Effect：注册 ask_llm Tool
+└── Effect：启动 heartbeat timer
+```
+
+### 4.3 依赖消失并触发清理
+
+如果 LLM Provider 被卸载，`llm` Service 从 Context 中消失，`AgentPlugin` 的必需依赖不再满足。Fiber 随即进入 UNLOADING，运行它拥有的 disposer：timer 被清除，`ask_llm` 从 Tool Registry 中移除。清理结束后，此次 Fiber 进入 DISPOSED。
+
+这里的关键不在于具体注册了哪个 Tool，而在于下面的一般规律：
+
+> 插件通过生命周期感知的 API 建立注册时，运行时把对应的撤销操作归属于当前 Fiber；Fiber 离开时，这次运行建立的状态也随之离开。
+
+如果稍后新的 LLM Provider 出现，依赖再次满足，插件会重新运行并取得新的 LLM 实例，再建立一套新的 Tool 注册和 timer。至此，五个概念已经形成完整闭环，下面再深入清理顺序、失败回滚和父子生命周期。
 
 ## 五、为什么 Effect 通常逆序清理
+
+在贯穿示例中，Agent 先注册 Tool，后启动 timer；卸载时则应先停止 timer，再撤销 Tool。这个顺序来自 Effect 的依赖关系，而不是某个 Tool API 的特殊规则。
 
 假设加载顺序是：
 
@@ -296,34 +365,7 @@ ROLLBACK
 
 “事务”是解释模型，不意味着 Cordis 提供数据库式 ACID 保证；它强调的是失败时不应遗留半安装状态。
 
-## 七、时间组合性到底是什么
-
-最初把时间组合性理解成“插件可以干净卸载”并没有错，但范围太窄。更准确的理解是：
-
-> 组件可以在任意时刻进入或离开系统，运行时保证它在存活区间中建立的外部状态与其生命周期保持一致。
-
-设 Fiber 的存活区间为 $L_F$ ，某个 Effect 的存活区间为 $L_E$ ，则应满足：
-
-$$L_E \subseteq L_F$$
-
-默认情况下，Effect 随 Fiber 建立并随 Fiber 撤销，可以近似理解为：
-
-$$L_E = L_F$$
-
-如果插件提前调用 `ctx.effect()` 返回的 disposer，则 Effect 可以比 Fiber 更早结束：
-
-$$L_E \subset L_F$$
-
-`ctx.effect()` 返回的 disposer 支持提前释放；官方 API 还明确说明，重复调用该 disposer 是 no-op。这避免了“手动提前释放一次，Fiber 卸载时又释放一次”导致的重复关闭问题。
-
-空间组合性则关注“组件在哪个 Context/Scope 中可见、同名 Service 如何隔离”。两者合起来，Cordis 才能支持：
-
-- 不同 Agent Context 使用不同 LLM 或 Shell 实例；
-- Tool、Skill、Subagent、Session 在局部作用域内创建与销毁；
-- Provider 热替换时，只重启受到依赖影响的消费者；
-- Runtime 持续运行，而局部能力动态出现、消失、替换和重组。
-
-## 八、父子 Fiber 与结构化生命周期
+## 七、父子 Fiber 与结构化生命周期
 
 `ctx.plugin(childPlugin)` 创建的是一个独立的子 Fiber，但它的生命周期归属于父 Fiber：
 
@@ -338,7 +380,7 @@ Agent Fiber
 
 其原则类似结构化并发：子任务可以有独立状态，但不应无意中活得比父作用域更久。
 
-## 九、必需依赖与可选依赖不要混用
+## 八、必需依赖与可选依赖不要混用
 
 必需依赖：没有该 Service，插件整体就不应该运行。
 
@@ -357,7 +399,7 @@ export function apply(ctx: Context) {
 
 如果把可选的 `metrics` 错写进 `inject`，那么 `metrics` Provider 一旦消失，整个插件都会卸载。这不是普通的空值处理差异，而是生命周期语义差异。
 
-## 十、Service 替换为什么需要重跑消费者
+## 九、Service 替换为什么需要重跑消费者
 
 假设 Consumer 在 `apply()` 中捕获了旧实例：
 
@@ -386,6 +428,35 @@ Consumer unload
 ```
 
 HMR 由此不需要为每种插件单独发明热切换协议：旧 Provider 卸载、注册清理、新 Provider 挂载、依赖消费者重新加载，都沿用同一套生命周期机制。
+
+## 十、从生命周期机制推导时间组合性
+
+前面已经依次看到：必需依赖决定 Fiber 能否存在，Effect 记录 Fiber 创建的外部状态，父子 Fiber 形成结构化生命周期，Service 替换则通过卸载和重载让消费者切换到新实例。有了这些机制，才能准确理解“时间组合性”。
+
+时间组合性不只是“插件可以干净卸载”，而是：
+
+> 组件可以在任意时刻进入或离开系统，运行时保证它在存活区间中建立的外部状态与其生命周期保持一致。
+
+设 Fiber 的存活区间为 $L_F$ ，某个 Effect 的存活区间为 $L_E$ ，则应满足：
+
+$$L_E \subseteq L_F$$
+
+默认情况下，Effect 随 Fiber 建立并随 Fiber 撤销，可以近似理解为：
+
+$$L_E = L_F$$
+
+如果插件提前调用 `ctx.effect()` 返回的 disposer，则 Effect 可以比 Fiber 更早结束：
+
+$$L_E \subset L_F$$
+
+`ctx.effect()` 返回的 disposer 支持提前释放；官方 API 还明确说明，重复调用该 disposer 是 no-op。这避免了“手动提前释放一次，Fiber 卸载时又释放一次”造成的重复关闭。
+
+与之对应，空间组合性关注“组件在哪个 Context/Scope 中可见、同名 Service 如何隔离”。二者共同保证：
+
+- 不同 Agent Context 可以使用不同 LLM 或 Shell 实例；
+- Tool、Skill、Subagent 和 Session 可以在局部作用域内创建与销毁；
+- Provider 热替换时，相关消费者能够清理旧状态并重新绑定；
+- Runtime 持续运行，而局部能力可以动态出现、消失、替换和重组。
 
 ## 十一、Mini-Cordis：用代码还原核心闭环
 
@@ -599,27 +670,27 @@ llmFiber.dispose()
 > [!note]
 > 本次已对示例的类型关系、Context 方法绑定、依赖刷新、幂等释放和逆序清理进行静态一致性检查；当前环境没有 TypeScript 编译器，因此没有把它标记为已编译或已运行验证。它的定位仍是公式与生命周期主线一致的教学代码。
 
-## 十二、常见误解与纠正
+## 十二、理解边界：五个容易混淆的结论
 
-### 12.1 “安装插件时记录一个统一的卸载函数”
+### 12.1 Fiber 收集的是逐项 disposer，不是静态卸载脚本
 
-不够准确。Fiber 在插件加载过程中持续收集每个 Effect 的 disposer；内置注册 API 也会把撤销逻辑绑定到当前 Fiber。它更像动态增长的 cleanup stack。
+Fiber 在插件加载过程中持续收集每个 Effect 的 disposer；内置注册 API 也会把撤销逻辑绑定到当前 Fiber。因此，它更像一个随本次运行动态增长的 cleanup stack，而不是安装时预先写死的一段统一卸载脚本。
 
-### 12.2 “inject 就是依赖注入参数”
+### 12.2 inject 不只是依赖注入参数
 
-不够准确。它还定义 Fiber 的生命周期前提，并在加载之后持续跟踪 Service 变化。
+`inject` 既声明依赖关系，也定义 Fiber 的生命周期前提；运行时在插件加载之后仍会持续跟踪相关 Service 的变化。
 
-### 12.3 “Service 消失只是把 ctx.llm 设为 undefined”
+### 12.3 Service 消失会驱动依赖方的生命周期变化
 
-错误。对于把 `llm` 声明为必需依赖的 Consumer，Service 消失会驱动 Consumer 卸载，防止旧闭包继续持有失效实例。
+对于把 `llm` 声明为必需依赖的 Consumer，Service 消失不只是让一次属性读取返回空值，还会驱动 Consumer 卸载，防止旧闭包继续持有失效实例。
 
-### 12.4 “逆序清理意味着异步 disposer 严格串行”
+### 12.4 逆序启动不等于异步清理严格串行
 
-错误。官方只保证逆注册顺序启动；需要严格顺序时，应在同一个 disposer 中显式 `await`。
+官方保证 disposer 按逆注册顺序启动，但多个异步 disposer 仍可能并发。需要严格完成顺序时，应在同一个 disposer 中显式 `await`。
 
-### 12.5 “Mini-Cordis 就是真实 Cordis 的内部源码”
+### 12.5 Mini-Cordis 是教学模型，不是真实源码
 
-错误。Mini 版本是用于验证心智模型的教学实现。真实 Cordis 还处理作用域、隔离、父子 Fiber、异步 Effect、错误、诊断与热更新等问题。
+Mini 版本用于验证心智模型，只保留主循环。真实 Cordis 还处理作用域、隔离、父子 Fiber、异步 Effect、错误、诊断与热更新等问题。
 
 ## 十三、为什么这套机制特别适合 Agent Harness
 
