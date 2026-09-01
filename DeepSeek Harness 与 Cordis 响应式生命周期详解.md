@@ -761,3 +761,13 @@ Service 变化再次驱动 inject 与 Fiber
 ```
 
 最终，空间组合性回答“组件放在哪里、能看到什么”，时间组合性回答“组件在何时存在、离开时留下的状态能否一起消失”。Cordis 用 Context、Service、inject、Fiber 与 Effect 把这两个问题统一进同一个运行时模型。
+
+## 后续学习建议
+
+建议下一阶段从教学心智模型转向当前代码版本中的可验证行为：
+
+1. **沿一条真实插件调用链阅读源码**：从 Service 注册开始，追踪依赖满足、Fiber 状态迁移、Effect 登记、卸载与 disposer 执行，记录每个结论对应的文件和测试。
+2. **为 Mini-Cordis 增加失败测试**：覆盖加载中抛错、依赖突然消失、Service 替换、父子 Fiber 递归清理和 disposer 重复调用，验证回滚与幂等性。
+3. **研究异步清理和重入语义**：通过可控延迟与事件日志观察多个异步 disposer、快速 Service 抖动和插件重载的顺序，区分文档保证与实现细节。
+4. **比较其他生命周期模型**：将 Cordis 与普通依赖注入容器、React Effect、结构化并发和 Actor 生命周期对照，明确相似类比在哪里成立、在哪里失效。
+5. **连接 Agent 的实际能力层**：选取 LLM Provider、Tool Registry 或 MCP Client 插件，画出其 Service、inject、Fiber 和 Effect，检验生命周期机制如何防止连接、计时器或工具注册泄漏。

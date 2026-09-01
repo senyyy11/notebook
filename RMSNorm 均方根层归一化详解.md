@@ -644,6 +644,15 @@ RMSNorm 的完整过程可以压缩为三步：
 4. 如果 $\gamma$ 在不同维度差异很大，“归一化后 RMS 为 1”是否仍然成立？
 5. 在相同模型上，RMSNorm 的理论运算减少能否转化为端到端训练加速？
 
+## 后续学习建议
+
+可以把上面的开放问题转化为三组逐步加深的实验：
+
+1. **先做 RMSNorm 与 LayerNorm 的数值对照**：构造零均值、强均值偏移和不同缩放幅度的输入，比较输出均值、RMS、方差及梯度，直观看到“去中心化”缺失带来的差别。
+2. **再学习 Pre-Norm、Post-Norm 与残差缩放**：分析归一化位置怎样改变恒等梯度路径，并继续比较 DeepNorm、ScaleNorm 或 LayerScale 等深层稳定化方法。
+3. **研究低精度数值行为**：在 FP16、BF16 和 FP32 下比较平方均值、$\epsilon$ 与梯度有限性，区分理论公式、框架实现和融合 Kernel 的差异。
+4. **做端到端性能基准**：在相同 Transformer Block 上测量 LayerNorm 与 RMSNorm 的训练吞吐、显存和收敛曲线，验证局部算子减少是否真正改善整体性能。
+
 ## 参考资料
 
 1. Biao Zhang, Rico Sennrich. [Root Mean Square Layer Normalization](https://arxiv.org/abs/1910.07467), NeurIPS 2019.

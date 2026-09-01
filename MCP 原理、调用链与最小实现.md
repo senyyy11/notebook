@@ -375,6 +375,16 @@ MCP 的工程意义不是让协议替 Agent 思考，而是为 Agent 的外部�
 
 掌握这条边界后，Tools、Resources、Prompts、stdio、Streamable HTTP 以及不同语言 SDK 都可以放回同一个框架中理解，而不会把“模型决策”“Runtime 执行”和“协议通信”混为一谈。
 
+## 后续学习建议
+
+建议从当前的静态代码骨架继续走向可观察、可测试且具备安全边界的完整 Host：
+
+1. **先实际运行 stdio Server 与 Client**：记录初始化、能力协商、`tools/list`、`tools/call` 和错误结果，确认高层 SDK 调用与协议消息一一对应。
+2. **扩展 Resources 与 Prompts**：在同一 Server 中加入一个只读 Resource 和一个 Prompt，比较三类 primitive 的控制者、数据流和适用场景。
+3. **实现真正的模型工具循环**：接入一个支持 Function Calling 的模型，保留 Tool Call ID、参数校验、最大轮数、超时和错误回填，验证“模型建议”与“Host 批准执行”的边界。
+4. **再迁移到 Streamable HTTP**：学习远程连接、会话、认证、授权范围和多 Client 并发，并为写操作加入明确的用户确认。
+5. **建立协议级测试与可观测性**：覆盖未知 Tool、错误参数、Server 超时、断线重连、重复请求和幂等性，同时记录调用耗时与审计事件。
+
 ## 参考资料
 
 - [MCP 官方架构说明](https://modelcontextprotocol.io/specification/2025-06-18/architecture)

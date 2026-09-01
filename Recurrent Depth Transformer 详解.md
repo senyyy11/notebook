@@ -531,6 +531,16 @@ Recurrent Depth 更像一组可反复乘坐的“计算电梯”：核心参数�
 
 但这台电梯并不会自动知道目的地。训练必须让每轮更新具有可复用性，初始化与归一化要保证深循环稳定，推理时还需要判断何时停止。最终能力来自架构、训练分布、优化方法和计算预算的共同作用，而不是“循环”二字本身。
 
+## 后续学习建议
+
+建议把后续重点放在“怎样训练可重复状态转移、怎样判断停止、循环中究竟发生了什么”上：
+
+1. **回到 Universal Transformer 与 ACT**：比较早期的深度循环、位置/时间编码和自适应计算时间，区分思想继承与现代 test-time compute 目标。
+2. **实现一个小型循环 Transformer**：在算法任务上改变训练与推理循环次数，绘制准确率、logit margin 和隐藏状态变化，亲自观察 depth extrapolation 与 overthinking。
+3. **深入 Adaptive Halting**：比较固定阈值、基于熵/KL 的规则以及学习式停止头，并检查停止置信度是否经过校准。
+4. **研究循环状态的机制解释**：使用 probing、状态差分和因果干预判断每轮是在继续组合信息、重复计算，还是破坏已得到的答案。
+5. **与显式 CoT 和并行采样比较**：在相同 FLOPs 或延迟预算下比较 latent recurrence、长思维链和 Best-of-N，避免只按参数量评价 test-time scaling。
+
 ## 参考资料
 
 1. Geiping et al., [Scaling up Test-Time Compute with Latent Reasoning: A Recurrent Depth Approach](https://arxiv.org/abs/2502.05171), 2025.

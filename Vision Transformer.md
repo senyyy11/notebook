@@ -479,9 +479,12 @@ $$[B,3,224,224]\rightarrow[B,196,768]\rightarrow[B,197,768]\rightarrow[B,768]\ri
 
 > ViT 中的 196 表示 token 的数量；每个 token 都是一个 $D$ 维向量。RGB 的 3 个通道属于每个 Patch 的内部内容，不会把 Patch 数量再乘以 3。
 
-## 11. 下一步学习问题
+## 11. 后续学习建议
 
-- 用 4 个 Patch、每个 token 3～4 维的数值例子，手算 $Q$、$K$、$V$、$QK^T$、Softmax 和加权求和。
-- 比较 `CLS` 与 mean pooling 在信息汇聚方式上的区别。
-- 研究位置编码怎样把一维 token 顺序与二维 Patch 网格关联起来。
-- 比较标准 ViT、DeiT、Swin Transformer、MAE 和 DINO 对数据效率、局部性或训练目标的改进。
+建议按照“手算基础 → 训练改进 → 视觉层级 → 自监督预训练”的顺序继续：
+
+1. **先做一个极小数值例子**：使用 4 个 Patch、每个 token 3～4 维，手算 $Q$、$K$、$V$、$QK^T$、Softmax 和加权求和，同时跟踪每一步张量形状。
+2. **比较全局表示的聚合方式**：在同一小模型上对比 `CLS`、mean pooling 和 attention pooling，观察信息汇聚与梯度路径的差异。
+3. **继续学习 DeiT 与训练技巧**：理解蒸馏 token、数据增强、正则化和优化策略如何缓解原始 ViT 对大规模数据的依赖。
+4. **学习 Swin Transformer 的分层视觉结构**：重点比较窗口注意力、Patch Merging 与标准 ViT 全局注意力在局部性、分辨率和计算量上的取舍。
+5. **进入 MAE、DINO 等自监督视觉学习**：比较遮挡重建与自蒸馏如何改变表示学习目标，再把这些视觉编码器与 CLIP、VLM 中的视觉塔联系起来。

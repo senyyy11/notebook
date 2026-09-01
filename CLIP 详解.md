@@ -404,6 +404,16 @@ def zero_shot_predict(
 7. 推理时把类别写成文本提示，文本 embedding 就成为动态分类器。
 8. 现代 VLM 为保留局部细节，进一步把多个 patch features 经 Projector 送入 LLM。
 
+## 后续学习建议
+
+建议从“对比目标的改进”逐步走向“细粒度视觉语言理解”：
+
+1. **先比较 InfoNCE 与 SigLIP 类目标**：研究全局 Softmax、独立 sigmoid 损失、batch size 和负样本依赖怎样改变训练信号。
+2. **做一次零样本与检索实验**：在同一数据集上测试 prompt 模板、prompt ensemble、Temperature 和类别描述，记录准确率、召回率与置信度校准。
+3. **研究细粒度对齐和视觉定位**：比较全局 embedding 与 patch/token-level 特征在定位、计数、OCR 和关系判断中的差异，理解 CLIP 全局压缩的边界。
+4. **连接 BLIP-2、LLaVA 等 VLM 架构**：重点学习视觉编码器、Q-Former/Projector 与 LLM 的接口，区分跨模态对齐、视觉信息压缩和语言生成的职责。
+5. **进一步检查鲁棒性与偏差**：对分布外图像、类别措辞、文化概念和对抗性文本进行分组评测，避免把高相似度直接解释为事实正确或通用视觉理解。
+
 ## 资料与来源
 
 - Radford et al., 2021：[Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020)

@@ -800,6 +800,16 @@ $$\boxed{\text{完整维度主干}+\text{低维专家空间}+\text{更多专家}
 6. LatentMoE 与量化、Expert Parallel、Tensor Parallel 结合时，端到端瓶颈会如何变化？
 7. Multi-Head LatentMoE 如何使通信成本不再随激活专家数 $K$ 线性增加？
 
+## 后续学习建议
+
+建议从“路由数学—训练稳定—分布式系统—潜在空间专家”四个层次推进：
+
+1. **手算 Top-k 路由和辅助负载均衡损失**：跟踪一个小 batch 中每个 token 的门控分数、专家容量、丢弃/重路由和混合权重，明确稀疏激活不等于稀疏参数存储。
+2. **比较 Switch、Expert Choice 与无辅助损失路由**：重点观察 token 负载、专家负载、路由偏置和训练稳定性怎样相互制约。
+3. **学习 Expert Parallelism 的系统代价**：理解 All-to-All 通信、容量因子、专家放置、负载倾斜与推理批处理，建立“理论 FLOPs 降低不等于延迟降低”的工程判断。
+4. **继续研究 LatentMoE 与稳定路由设计**：分析潜在投影、共享专家、归一化和路由空间如何共同影响专家分工，并用消融和路由可视化区分论文主张与实际证据。
+5. **最后做 Dense–MoE 对照实验**：在相同训练算力、激活参数和推理约束下比较质量、吞吐、显存与部署复杂度，避免只比较总参数量。
+
 ## 参考资料
 
 1. Noam Shazeer et al. [Outrageously Large Neural Networks: The Sparsely-Gated Mixture-of-Experts Layer](https://arxiv.org/abs/1701.06538), ICLR 2017.
