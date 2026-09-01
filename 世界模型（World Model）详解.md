@@ -661,4 +661,3 @@ $$a_t^*=\arg\max_a\mathbb E[G_t]$$
 3. Danijar Hafner et al. [Dream to Control: Learning Behaviors by Latent Imagination](https://arxiv.org/abs/1912.01603), 2019.
 4. Danijar Hafner et al. [Mastering Diverse Domains through World Models](https://arxiv.org/abs/2301.04104), 2023.
 5. Mahmoud Assran et al. [Self-Supervised Learning from Images with a Joint-Embedding Predictive Architecture](https://arxiv.org/abs/2301.08243), 2023.
-6. [世界模型解析——前置学习讨论](https://chatgpt.com/share/6a817714-1390-83e8-9b36-dc8592d1eb0b)。

@@ -406,7 +406,6 @@ def zero_shot_predict(
 
 ## 资料与来源
 
-- 学习对话共享页：[学习 CLIP 基础原理](https://chatgpt.com/share/6a8d7b32-8ccc-83e8-b5fc-060f38ea5923)
 - Radford et al., 2021：[Learning Transferable Visual Models From Natural Language Supervision](https://arxiv.org/abs/2103.00020)
 - OpenAI 官方介绍：[CLIP: Connecting text and images](https://openai.com/index/clip/)
 - OpenAI 官方代码：[openai/CLIP](https://github.com/openai/CLIP)

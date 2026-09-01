@@ -533,9 +533,8 @@ Recurrent Depth 更像一组可反复乘坐的“计算电梯”：核心参数�
 
 ## 参考资料
 
-1. [共享对话：Recurrent-Depth Transformer 讲解](https://chatgpt.com/share/6a831ba1-6b2c-83e8-9024-cacfc188c567)
-2. Geiping et al., [Scaling up Test-Time Compute with Latent Reasoning: A Recurrent Depth Approach](https://arxiv.org/abs/2502.05171), 2025.
-3. Kohli et al., [Loop, Think, & Generalize: Implicit Reasoning in Recurrent-Depth Transformers](https://arxiv.org/abs/2604.07822), 2026.
-4. Lu et al., [Latent Chain-of-Thought? Decoding the Depth-Recurrent Transformer](https://arxiv.org/abs/2507.02199), 2025.
-5. Chen, [Thinking Deeper, Not Longer: Depth-Recurrent Transformers for Compositional Generalization](https://arxiv.org/abs/2603.21676), 2026.
-6. Dehghani et al., [Universal Transformers](https://arxiv.org/abs/1807.03819), 2018.
+1. Geiping et al., [Scaling up Test-Time Compute with Latent Reasoning: A Recurrent Depth Approach](https://arxiv.org/abs/2502.05171), 2025.
+2. Kohli et al., [Loop, Think, & Generalize: Implicit Reasoning in Recurrent-Depth Transformers](https://arxiv.org/abs/2604.07822), 2026.
+3. Lu et al., [Latent Chain-of-Thought? Decoding the Depth-Recurrent Transformer](https://arxiv.org/abs/2507.02199), 2025.
+4. Chen, [Thinking Deeper, Not Longer: Depth-Recurrent Transformers for Compositional Generalization](https://arxiv.org/abs/2603.21676), 2026.
+5. Dehghani et al., [Universal Transformers](https://arxiv.org/abs/1807.03819), 2018.

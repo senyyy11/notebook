@@ -377,7 +377,6 @@ MCP 的工程意义不是让协议替 Agent 思考，而是为 Agent 的外部�
 
 ## 参考资料
 
-- [共享学习对话：MCP 原理与工作流程](https://chatgpt.com/share/6a9540df-85c4-83e8-9fdf-e80827875baa)
 - [MCP 官方架构说明](https://modelcontextprotocol.io/specification/2025-06-18/architecture)
 - [MCP Server primitives 概览](https://modelcontextprotocol.io/specification/2025-06-18/server/index)
 - [MCP Tools 规范](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)

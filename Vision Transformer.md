@@ -2,7 +2,6 @@
 
 ## 资料与学习目标
 
-- 学习材料：[讲解 Vision Transformer（ChatGPT 共享对话）](https://chatgpt.com/share/6a8708e0-feac-83e8-a2cd-6b82ac02077a)
 - 相关论文：[An Image is Worth 16x16 Words: Transformers for Image Recognition at Scale](https://arxiv.org/abs/2010.11929)
 - 主题：标准 Vision Transformer（ViT）图像分类流程
 - 目标：理解一张二维图像怎样变成 token 序列，各模块为什么存在，张量形状如何变化，以及如何用 PyTorch 写出与公式对应的核心模型。

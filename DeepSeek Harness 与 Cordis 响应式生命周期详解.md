@@ -2,7 +2,6 @@
 
 ## 资料信息
 
-- 学习材料：[ChatGPT 共享对话：学习 DeepSeek Harness](https://chatgpt.com/share/6a93b6e1-bf40-83e8-906d-b3825a8b338f)
 - 核对资料：[DeepSeek Harness Architecture](https://deepseek-harness.github.io/deepseek-harness/en/reference/)
 - 核对资料：[Cordis Primer](https://deepseek-harness.github.io/deepseek-harness/en/reference/cordis-primer)
 - 核对资料：[Plugins and lifecycle](https://deepseek-harness.github.io/deepseek-harness/en/develop/framework/)
