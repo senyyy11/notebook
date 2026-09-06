@@ -48,7 +48,7 @@ $$\pi(s) = \arg\max_a Q(s,a)$$
 
 最优动作价值定义为所有策略中可获得的最大动作价值：
 
-$$Q^{*}(s,a) = \max_{\pi} Q^{\pi}(s,a)$$
+$$Q^{\ast}(s,a) = \max_{\pi} Q^{\pi}(s,a)$$
 
 回报可拆开第一步：
 
@@ -56,7 +56,7 @@ $$G_t = r_{t+1} + \gamma G_{t+1}$$
 
 当智能体在状态 $s$ 执行动作 $a$ 后到达随机的下一状态 $s'$ ，第一项 $r$ 已由这次交互真实给出；剩余部分的最佳做法，是在 $s'$ 选择最优动作。因此：
 
-$$Q^{*}(s,a) = \mathbb{E}\left[r + \gamma \max_{a'} Q^{*}(s',a') \mid s,a\right]$$
+$$Q^{\ast}(s,a) = \mathbb{E}[r + \gamma \max_{a'} Q^{\ast}(s',a') \mid s,a]$$
 
 这就是 **Bellman 最优方程**。它不是把整条轨迹倒着计算，而是一个自洽条件：当前最优价值应等于“一步真实结果”加上“从下一状态开始的最优未来价值”。期望符号来自环境转移和奖励可能具有随机性。
 
@@ -86,7 +86,7 @@ $$Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \alpha\delta_t$$
 
 将 TD 误差代回：
 
-$$Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \alpha\left[r_{t+1}+\gamma\max_{a'}Q(s_{t+1},a')-Q(s_t,a_t)\right]$$
+$$Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \alpha[r_{t+1}+\gamma\max_{a'}Q(s_{t+1},a')-Q(s_t,a_t)]$$
 
 $\alpha \in (0,1]$ 是学习率。 $\alpha=1$ 时，当前估计直接改为本次 TD 目标；较小的 $\alpha$ 则更平滑，能降低随机奖励和偶然轨迹带来的波动。更新式的本质是：
 
@@ -235,13 +235,13 @@ $$\max_{a'} Q(s_{t+1},a')$$
 
 与之对照，SARSA 的目标使用实际执行的下一动作 $a_{t+1}$ ：
 
-$$Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \alpha\left[r_{t+1}+\gamma Q(s_{t+1},a_{t+1})-Q(s_t,a_t)\right]$$
+$$Q(s_t,a_t) \leftarrow Q(s_t,a_t) + \alpha[r_{t+1}+\gamma Q(s_{t+1},a_{t+1})-Q(s_t,a_t)]$$
 
 因此 SARSA 是 on-policy：它评价并改进当前包含探索的同一策略。Q-Learning 追求“若之后总按贪心策略行动会怎样”，SARSA 则把真实会发生的探索风险一并计入价值。
 
 ## 9. 收敛直觉与成立条件
 
-在有限的 MDP 中，表格型 Q-Learning 有经典收敛保证；直觉上，每个状态—动作对被持续访问，TD 更新就会反复纠正其 Bellman 误差，最终稳定在 Bellman 最优方程的唯一解 $Q^{*}$ 。常见条件包括：
+在有限的 MDP 中，表格型 Q-Learning 有经典收敛保证；直觉上，每个状态—动作对被持续访问，TD 更新就会反复纠正其 Bellman 误差，最终稳定在 Bellman 最优方程的唯一解 $Q^{\ast}$ 。常见条件包括：
 
 - 每个相关的状态—动作对被访问无穷多次；
 - 学习率满足随机逼近条件，例如 $\sum_t \alpha_t=\infty$ 且 $\sum_t \alpha_t^2<\infty$ ；
@@ -264,9 +264,9 @@ $$G_t = r_{t+1}+\gamma r_{t+2}+\gamma^2r_{t+3}+\cdots$$
 
 $$Q^{\pi}(s,a) = \mathbb{E}_{\pi}[G_t \mid S_t=s,A_t=a]$$
 
-$$Q^{*}(s,a)=\max_{\pi}Q^{\pi}(s,a)$$
+$$Q^{\ast}(s,a)=\max_{\pi}Q^{\pi}(s,a)$$
 
-$$Q^{*}(s,a)=\mathbb{E}\left[r+\gamma\max_{a'}Q^{*}(s',a')\mid s,a\right]$$
+$$Q^{\ast}(s,a)=\mathbb{E}[r+\gamma\max_{a'}Q^{\ast}(s',a')\mid s,a]$$
 
 $$\delta_t=r_{t+1}+\gamma\max_{a'}Q(s_{t+1},a')-Q(s_t,a_t)$$
 
