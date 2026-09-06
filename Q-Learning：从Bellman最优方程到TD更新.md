@@ -98,6 +98,97 @@ Q-Learning 在刚得到一步转移后，就用当前估计的 $Q(s_{t+1},a')$ �
 
 这一点区分了 TD 方法和 Monte Carlo 方法：Monte Carlo 等回合结束后使用完整的实际回报 $G_t$ ；Q-Learning 使用一步奖励加当前的未来估计，通常更及时、样本效率更高，但会引入自举估计的偏差。
 
+### 可运行的核心实现
+
+下面的实现刻意不依赖 Gym、NumPy 或深度学习框架。它假定动作编号为 `0` 到 `num_actions - 1` ，环境只需提供 `reset()` 和 `step(action)` 两个方法；其中 `step` 返回 `下一状态, 奖励, 是否终止` 。`LineWorld` 只是一个可直接运行的最小环境，用来验证训练循环，不是 Q-Learning 的必要组成部分。
+
+```python
+from collections import defaultdict
+import random
+
+
+class LineWorld:
+    """四格线性环境：动作 0 向左，动作 1 向右；抵达最右端得到 +10。"""
+
+    num_actions = 2
+    n_states = 4
+
+    def reset(self):
+        self.state = 0
+        return self.state
+
+    def step(self, action):
+        if action == 1:
+            self.state = min(self.state + 1, self.n_states - 1)
+        else:
+            self.state = max(self.state - 1, 0)
+
+        terminated = self.state == self.n_states - 1
+        reward = 10.0 if terminated else -1.0
+        return self.state, reward, terminated
+
+
+def train_q_learning(
+    env,
+    num_actions,
+    episodes=1_500,
+    max_steps=100,
+    alpha=0.1,
+    gamma=0.9,
+    epsilon=1.0,
+    epsilon_decay=0.995,
+    epsilon_min=0.05,
+    seed=0,
+):
+    """返回 q[state][action]；状态必须是可哈希对象。"""
+    rng = random.Random(seed)
+    q = defaultdict(lambda: [0.0] * num_actions)
+
+    for _ in range(episodes):
+        state = env.reset()
+
+        for _ in range(max_steps):
+            # 行为策略：以 epsilon 的概率探索，否则利用当前 Q 表。
+            if rng.random() < epsilon:
+                action = rng.randrange(num_actions)
+            else:
+                best_value = max(q[state])
+                best_actions = [a for a, value in enumerate(q[state]) if value == best_value]
+                action = rng.choice(best_actions)  # 并列最大值时随机打破平局
+
+            next_state, reward, terminated = env.step(action)
+
+            # 目标策略：无论本次行为动作如何，都评价下一状态的最大 Q 值。
+            best_next_q = 0.0 if terminated else max(q[next_state])
+            td_target = reward + gamma * best_next_q
+            td_error = td_target - q[state][action]
+            q[state][action] += alpha * td_error
+
+            state = next_state
+            if terminated:
+                break
+
+        epsilon = max(epsilon_min, epsilon * epsilon_decay)
+
+    return q
+
+
+env = LineWorld()
+q = train_q_learning(env, num_actions=env.num_actions)
+
+for state in range(env.n_states - 1):
+    best_action = max(range(env.num_actions), key=lambda action: q[state][action])
+    print(f"state={state}, Q={q[state]}, greedy_action={best_action}")
+```
+
+这段代码中，`q[state][action]` 对应 $Q(s_t,a_t)$ ；`best_next_q` 对应 $\max_{a'}Q(s_{t+1},a')$ ；`td_target` 和 `td_error` 分别对应 TD 目标 $y_t$ 与 TD 误差 $\delta_t$ 。因此最关键的一行：
+
+```python
+q[state][action] += alpha * td_error
+```
+
+与本节的更新公式完全一致。注意 `best_next_q` 总取最大值，而不是取下一次实际采样的动作价值；这正是实现中体现 Q-Learning **off-policy** 特性的地方。若改成实际执行的下一动作的 Q 值，就会接近 SARSA 的更新方式。
+
 ## 6. 手算：价值如何逐步向早期状态传播
 
 考虑一条确定性链：
