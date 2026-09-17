@@ -1,10 +1,12 @@
 # DeepSeek-V4.1-Flash 架构与 KV Cache 优化详解
 
-## 1. 学习目标
+## 1. 这篇笔记要解决什么问题
 
-DeepSeek-V4.1-Flash 的核心价值，不只是把某个张量从 FP8 改成 FP4，而是重新设计了长上下文模型中三个相互关联的问题：输入如何编码、Decoder 如何读取历史、暂停会话时哪些中间状态值得保存。
+DeepSeek-V4.1-Flash 的核心价值，不只是把某个张量从 FP8 改成 FP4，而是重新设计了长上下文推理中三个相互关联的问题：输入如何编码、Decoder 如何读取历史，以及暂停会话时哪些中间状态值得保存。
 
-传统 decoder-only Transformer 通常让每一层维护自己的历史 KV Cache。上下文越长、层数越多、并发会话越多，这些缓存占用的 HBM 和持久化空间就越大。V4.1-Flash 通过 Causal Encoder-Decoder、Compressed Sparse Attention 2、Sliding-Window Attention Bounded Replay 和 FP4 KV Cache，将全局 KV Cache 压缩到官方公布的 890 bytes/token，并将持久化缓存降到上一代 V4-Flash 的约八分之一。
+传统 decoder-only Transformer 通常让每一层维护自己的历史 KV Cache。上下文越长、层数越多、并发会话越多，这些缓存占用的 HBM 和持久化空间就越大。V4.1-Flash 通过 Causal Encoder-Decoder（CED）、Compressed Sparse Attention 2（CSA2）、Sliding-Window Attention（SWA）的 Bounded Replay，以及 FP4 KV Cache，将全局 KV Cache 压缩到官方公布的 890 bytes/token，并将持久化缓存降到上一代 V4-Flash 的约八分之一。
+
+可以先把整套设计理解为一条分工链：CED 决定“谁负责编码输入、谁负责生成输出”，CSA2 决定“从很长的历史中查看哪些位置”，SWA 保留“眼前最近的一小段上下文”，FP4 与 Bounded Replay 则继续减少长期保存这些状态的成本。它们不是四个互不相关的小技巧，而是在共同回答一个问题：**怎样让长上下文模型保留可用的历史，同时避免缓存成本随层数和序列长度失控。**
 
 本文沿着“一个 token 如何穿过模型”的主线展开，重点澄清以下容易混淆的边界：
 
@@ -50,11 +52,22 @@ $$y(x)=E_{\mathrm{shared}}(x)+\sum_{i\in\mathrm{TopK}(g(x))}p_iE_i(x)$$
 | 权重占用 | 完整模型需要保存多少权重数据？ |
 | KV Cache | 当前会话为了复用历史计算，需要保存多少中间状态？ |
 
-## 3. 传统 decoder-only Transformer 如何维护历史
+## 3. 前置知识：传统 decoder-only Transformer 如何维护历史
 
 理解 V4.1 的改动前，必须先理解传统结构为什么会为每一层保存不同的 KV。
 
-### 3.1 每层的 KV 不相同
+### 3.1 Prefill、Decode 与 KV Cache
+
+自回归模型的一次推理通常分为两个阶段：
+
+1. **Prefill（输入填充）**：模型一次处理用户已经给出的 Prompt，为所有输入位置计算隐藏状态，并建立后续生成需要的缓存。
+2. **Decode（逐 token 解码）**：模型每次只生成一个新 token。新 token 的 Query 需要读取此前所有可见位置的 Key 和 Value，然后才能预测下一个 token。
+
+如果 Decode 时每生成一个 token 都重新计算整段历史，长度为 $N$ 的上下文会被反复计算。KV Cache 的作用，就是保存历史 token 已经计算好的 Key 和 Value，让新 token 只需计算自己的 Query、Key 和 Value，再读取缓存中的历史状态。
+
+因此，KV Cache 保存的不是聊天文字本身，也不是模型参数，而是**由聊天 token 和模型权重共同计算出的中间张量**。
+
+### 3.2 每层的 KV 不相同
 
 设位置 $t$ 的初始表示为 $h_t^{(0)}$ 。第一层计算：
 
@@ -70,23 +83,15 @@ $$K_t^{(2)}=\mathrm{Norm}(h_t^{(1)})W_K^{(2)},\qquad V_t^{(2)}=\mathrm{Norm}(h_t
 
 不同层的输入隐藏状态不同，投影矩阵也不同，因此 $K^{(1)},V^{(1)}$ 与 $K^{(2)},V^{(2)}$ 通常不相同。浅层、中层和深层的 KV 可以看作同一段历史在不同抽象层次上的表示。
 
-### 3.2 最后一层输出，但所有层共同决定结果
+### 3.3 最后一层输出，但所有层共同决定结果
 
 生成 token 时，当前表示必须顺序经过全部层：
 
-```text
-当前 token 表示
-    ↓
-第 1 层读取第 1 层历史 KV，得到 h¹
-    ↓
-第 2 层读取第 2 层历史 KV，得到 h²
-    ↓
-……
-    ↓
-第 L 层得到 hᴸ
-    ↓
-LM Head 产生下一个 token 的概率
-```
+1. 当前 token 的初始表示进入第 1 层；
+2. 第 1 层读取第 1 层的历史 KV，产生 $h_t^{(1)}$ ；
+3. 第 2 层以 $h_t^{(1)}$ 为输入，读取第 2 层的历史 KV，产生 $h_t^{(2)}$ ；
+4. 这一过程逐层重复，直到第 $L$ 层产生 $h_t^{(L)}$ ；
+5. LM Head 将 $h_t^{(L)}$ 转换为下一个 token 的概率分布。
 
 最终概率来自最后一层：
 
@@ -94,13 +99,15 @@ $$P(y_t)=\mathrm{softmax}(W_{\mathrm{LM}}h_t^{(L)})$$
 
 但 $h_t^{(L)}$ 是前面所有层逐层加工的结果。因此“最后一层决定输出”和“所有层共同参与计算”并不矛盾：各层不是投票，而是串行变换。
 
-### 3.3 KV Cache 为什么随层数和上下文增长
+### 3.4 KV Cache 为什么随层数和上下文增长
 
 传统缓存大小可粗略写为：
 
 $$M_{\mathrm{KV}}\propto L\times N\times H_{\mathrm{KV}}\times d_{\mathrm{head}}\times 2\times b$$
 
-其中，$L$ 是独立缓存层数，$N$ 是上下文长度，$H_{\mathrm{KV}}$ 是 KV head 数量，$d_{\mathrm{head}}$ 是每个 head 的维度，$2$ 表示 Key 和 Value 两份，$b$ 是每个数值的字节数。长上下文下，层维度和序列维度共同放大缓存。
+其中，$L$ 是独立缓存层数，$N$ 是上下文长度，$H_{\mathrm{KV}}$ 是 KV head 数量，$d_{\mathrm{head}}$ 是每个 head 的维度，$2$ 表示 Key 和 Value 两份，$b$ 是每个数值的字节数。
+
+这个式子揭示了两个独立的放大因素：上下文每增加一个 token，所有缓存层都要新增一份 KV；模型每增加一个独立缓存层，同一段历史又要多保存一份表示。V4.1-Flash 的优化重点正是削弱第二个放大因素，并压低每个全局 KV 条目的存储位宽。
 
 ## 4. 两条正交的数据流：层间传递与历史读取
 
