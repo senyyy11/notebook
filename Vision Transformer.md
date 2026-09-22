@@ -30,12 +30,12 @@ $$X\in\mathbb{R}^{B\times C\times H\times W}$$
 
 其中：
 
-- $B$：batch size；
-- $C$：通道数，RGB 图像中 $C=3$；
-- $H,W$：图像高度和宽度；
-- $P$：正方形 Patch 的边长；
-- $D$：Transformer 的隐藏维度；
-- $N$：每张图像的 Patch 数量。
+- $B$ ：batch size；
+- $C$ ：通道数，RGB 图像中 $C=3$ ；
+- $H,W$ ：图像高度和宽度；
+- $P$ ：正方形 Patch 的边长；
+- $D$ ：Transformer 的隐藏维度；
+- $N$ ：每张图像的 Patch 数量。
 
 如果直接把每个像素当成 token，一张 $224\times224$ 图像会产生 $50176$ 个 token。Self-Attention 需要构造 $N\times N$ 的注意力矩阵，其主要复杂度近似为：
 
@@ -43,7 +43,7 @@ $$O(N^2D)$$
 
 逐像素处理会让注意力矩阵包含约 $2.5\times10^9$ 个元素。ViT 因此选择中间粒度：一个局部空间区域对应一个视觉 token。
 
-当 $H=W=224$、$P=16$ 时，Patch 数量为：
+当 $H=W=224$ 、 $P=16$ 时，Patch 数量为：
 
 $$N=\frac{H}{P}\times\frac{W}{P}=\frac{224}{16}\times\frac{224}{16}=14\times14=196$$
 
@@ -77,7 +77,7 @@ $$z_i=x_p^iE,\qquad z_i\in\mathbb{R}^{D}$$
 
 $$Z_{patch}\in\mathbb{R}^{B\times N\times D}$$
 
-因此，“196 个 token”的完整含义是 $196$ 个 $D$ 维向量，而不是 196 个数。当 $D=768$ 时，单张图像对应的张量是 $196\times768$。
+因此，“196 个 token”的完整含义是 $196$ 个 $D$ 维向量，而不是 196 个数。当 $D=768$ 时，单张图像对应的张量是 $196\times768$ 。
 
 ### 为什么还要做线性投影
 
@@ -85,7 +85,7 @@ $$Z_{patch}\in\mathbb{R}^{B\times N\times D}$$
 
 $$\mathbb{R}^{P^2C}\rightarrow\mathbb{R}^{D}$$
 
-即使在 ViT-B/16 中恰好有 $P^2C=D=768$，投影前后的数字维度相同，语义也不同：前者是原始像素值，后者是可供 Transformer 使用的学习表示。把 $D$ 改成 512 时，这一点会更直观：
+即使在 ViT-B/16 中恰好有 $P^2C=D=768$ ，投影前后的数字维度相同，语义也不同：前者是原始像素值，后者是可供 Transformer 使用的学习表示。把 $D$ 改成 512 时，这一点会更直观：
 
 $$196\times768\rightarrow196\times512$$
 
@@ -120,7 +120,7 @@ ViT 在 Patch 序列开头加入一个可学习的分类 token：
 
 $$[x_{class};z_1;z_2;\cdots;z_N]$$
 
-序列长度由 $N$ 变成 $N+1$。在 ViT-B/16 中，196 个 Patch 加一个分类 token，共 197 个 token。
+序列长度由 $N$ 变成 $N+1$ 。在 ViT-B/16 中，196 个 Patch 加一个分类 token，共 197 个 token。
 
 `CLS` 初始时不包含图像内容，但它会在每一层 Self-Attention 中读取其他 token 的信息。经过多层交互后，它成为面向分类任务学习到的全局图像表示。它不是固定的平均池化，而是一个参与注意力计算、由任务目标共同训练的信息汇聚节点。
 
@@ -136,7 +136,7 @@ Encoder 的输入为：
 
 $$Z_0=[x_{class};x_p^1E;x_p^2E;\cdots;x_p^NE]+E_{pos}$$
 
-当输入为 $224\times224$、Patch 为 $16\times16$、$D=768$ 时：
+当输入为 $224\times224$ 、Patch 为 $16\times16$ 、 $D=768$ 时：
 
 $$Z_0\in\mathbb{R}^{B\times197\times768}$$
 
@@ -166,7 +166,7 @@ $$Z_l=Z_l'+\mathrm{MLP}(\mathrm{LN}(Z_l'))$$
 
 ### LayerNorm
 
-对一个 $D$ 维 token $x$，均值和方差为：
+对一个 $D$ 维 token $x$ ，均值和方差为：
 
 $$\mu=\frac{1}{D}\sum_{i=1}^{D}x_i,\qquad\sigma^2=\frac{1}{D}\sum_{i=1}^{D}(x_i-\mu)^2$$
 
@@ -178,7 +178,7 @@ LayerNorm 独立处理每个样本、每个 token 的最后一个特征维度，
 
 ### Scaled Dot-Product Attention
 
-输入 $Z\in\mathbb{R}^{B\times T\times D}$，其中 $T=N+1$。通过三个线性映射得到：
+输入 $Z\in\mathbb{R}^{B\times T\times D}$ ，其中 $T=N+1$ 。通过三个线性映射得到：
 
 $$Q=ZW_Q,\qquad K=ZW_K,\qquad V=ZW_V$$
 
@@ -189,10 +189,10 @@ $$\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)
 - Query：当前 token 想寻找什么；
 - Key：当前 token 可以被怎样匹配；
 - Value：被关注时真正提供的内容；
-- $QK^T$：任意两个 token 的匹配分数，shape 为 $T\times T$；
-- $\sqrt{d_k}$：控制点积随维度增大而变大的尺度，避免 Softmax 过早饱和；
+- $QK^T$ ：任意两个 token 的匹配分数，shape 为 $T\times T$ ；
+- $\sqrt{d_k}$ ：控制点积随维度增大而变大的尺度，避免 Softmax 过早饱和；
 - Softmax：把每一行分数归一化成当前 Query 对所有 Key 的权重；
-- 乘以 $V$：按权重汇聚其他 token 的内容。
+- 乘以 $V$ ：按权重汇聚其他 token 的内容。
 
 Self-Attention 让左上角 Patch 在一层内就能直接读取右下角 Patch，这是它与局部卷积的重要差异。但“可以全局交互”不等于每个头必然学习到人类可解释的对象关系，具体模式由数据和训练目标决定。
 
@@ -206,11 +206,11 @@ $$d_k=\frac{D}{h}$$
 
 $$\mathrm{MSA}(Z)=\mathrm{Concat}(head_1,\ldots,head_h)W_O$$
 
-ViT-B 常用 $D=768$、$h=12$，所以每个头的维度为 64。不同头可能形成不同关联模式，但“边缘头”“颜色头”等名字只是可能的事后解释，不是人为固定的职责。
+ViT-B 常用 $D=768$ 、 $h=12$ ，所以每个头的维度为 64。不同头可能形成不同关联模式，但“边缘头”“颜色头”等名字只是可能的事后解释，不是人为固定的职责。
 
 ### MLP
 
-MLP 对序列中的每个 token 使用同一套参数，常把通道维度扩张到 $4D$ 后再压回 $D$：
+MLP 对序列中的每个 token 使用同一套参数，常把通道维度扩张到 $4D$ 后再压回 $D$ ：
 
 $$\mathrm{MLP}(x)=W_2\,\mathrm{GELU}(W_1x+b_1)+b_2$$
 
@@ -379,7 +379,7 @@ if __name__ == "__main__":
 
 | 代码 | 数学含义 |
 |---|---|
-| `Conv2d(kernel_size=P, stride=P)` | $x_p^iE$，同时完成切块与线性投影 |
+| `Conv2d(kernel_size=P, stride=P)` | $x_p^iE$ ，同时完成切块与线性投影 |
 | `torch.cat((cls, x), dim=1)` | $[x_{class};x_p^1E;\ldots;x_p^NE]$ |
 | `x + position_embedding` | 加入 $E_{pos}$ |
 | `attention(normalized, normalized, normalized)` | Self-Attention 中 $Q,K,V$ 都来自同一序列 |
@@ -439,7 +439,7 @@ ViT-B/16 中的 `/16` 就表示 Patch size 为 16；`B` 表示 Base 规模，典
 
 ### 输入尺寸与位置编码
 
-最小代码把可学习位置编码的长度固定为训练时的 $N+1$。如果推理图像分辨率变化，Patch 数也会变化，不能直接相加；实际模型通常对二维 Patch 网格的位置编码做插值，或采用其他位置表示。
+最小代码把可学习位置编码的长度固定为训练时的 $N+1$ 。如果推理图像分辨率变化，Patch 数也会变化，不能直接相加；实际模型通常对二维 Patch 网格的位置编码做插值，或采用其他位置表示。
 
 ### Patch 边界会造成早期信息分割
 
@@ -483,7 +483,7 @@ $$[B,3,224,224]\rightarrow[B,196,768]\rightarrow[B,197,768]\rightarrow[B,768]\ri
 
 建议按照“手算基础 → 训练改进 → 视觉层级 → 自监督预训练”的顺序继续：
 
-1. **先做一个极小数值例子**：使用 4 个 Patch、每个 token 3～4 维，手算 $Q$、$K$、$V$、$QK^T$、Softmax 和加权求和，同时跟踪每一步张量形状。
+1. **先做一个极小数值例子**：使用 4 个 Patch、每个 token 3～4 维，手算 $Q$ 、 $K$ 、 $V$ 、 $QK^T$ 、Softmax 和加权求和，同时跟踪每一步张量形状。
 2. **比较全局表示的聚合方式**：在同一小模型上对比 `CLS`、mean pooling 和 attention pooling，观察信息汇聚与梯度路径的差异。
 3. **继续学习 DeiT 与训练技巧**：理解蒸馏 token、数据增强、正则化和优化策略如何缓解原始 ViT 对大规模数据的依赖。
 4. **学习 Swin Transformer 的分层视觉结构**：重点比较窗口注意力、Patch Merging 与标准 ViT 全局注意力在局部性、分辨率和计算量上的取舍。
