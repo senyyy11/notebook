@@ -46,7 +46,7 @@ $$\mathrm{Image}\leftrightarrow\mathrm{Natural\ Language}$$
 
 $$\{(x_i,y_i)\}_{i=1}^{N}$$
 
-其中 $x_i$ 是第 $i$ 张图像，$y_i$ 是与其配对的文本。
+其中 $x_i$ 是第 $i$ 张图像， $y_i$ 是与其配对的文本。
 
 ### 3.1 图像侧
 
@@ -54,13 +54,13 @@ $$\{(x_i,y_i)\}_{i=1}^{N}$$
 
 $$X\in\mathbb{R}^{N\times C\times H\times W}$$
 
-若图像为 $224\times224$、patch size 为 $16\times16$，空间 patch 数为：
+若图像为 $224\times224$ 、patch size 为 $16\times16$ ，空间 patch 数为：
 
 $$L_v=\frac{224}{16}\times\frac{224}{16}=14\times14=196$$
 
-注意，patch 数量只由空间划分决定；每个 patch 内仍包含全部 $C=3$ 个 RGB 通道。每个 patch 展平后经线性投影成为一个 $D_v$ 维 token。加入 CLS token 后，ViT 的输入序列长度为 $197$。
+注意，patch 数量只由空间划分决定；每个 patch 内仍包含全部 $C=3$ 个 RGB 通道。每个 patch 展平后经线性投影成为一个 $D_v$ 维 token。加入 CLS token 后，ViT 的输入序列长度为 $197$ 。
 
-最后一层 CLS hidden state 可看作全局视觉表示 $h_i^I$，再由图像投影矩阵映射到共同维度 $D$：
+最后一层 CLS hidden state 可看作全局视觉表示 $h_i^I$ ，再由图像投影矩阵映射到共同维度 $D$ ：
 
 $$v_i=h_i^I W_I,\qquad v_i\in\mathbb{R}^{D}$$
 
@@ -74,7 +74,7 @@ $$Y\in\mathbb{N}^{N\times L_t}$$
 
 $$t_i=h_i^T W_T,\qquad t_i\in\mathbb{R}^{D}$$
 
-两个投影层的职责不是让编码器内部结构相同，而是把不同宽度的全局表示变换到共同的比较空间。例如，视觉侧内部宽度可以是 $D_v$，文本侧内部宽度可以是 $D_t$，但投影后的 $v_i$ 与 $t_i$ 都是 $D$ 维。
+两个投影层的职责不是让编码器内部结构相同，而是把不同宽度的全局表示变换到共同的比较空间。例如，视觉侧内部宽度可以是 $D_v$ ，文本侧内部宽度可以是 $D_t$ ，但投影后的 $v_i$ 与 $t_i$ 都是 $D$ 维。
 
 ### 3.3 L2 归一化
 
@@ -112,7 +112,7 @@ $S_{ij}$ 表示第 $i$ 张图像与第 $j$ 条文本的余弦相似度。按配�
 
 $$\cos(\theta)\in[-1,1]$$
 
-若直接送入 Softmax，相近候选之间的概率差异可能过小。CLIP 引入可学习尺度 $a$：
+若直接送入 Softmax，相近候选之间的概率差异可能过小。CLIP 引入可学习尺度 $a$ ：
 
 $$a=\exp(\alpha)=\frac{1}{\tau}>0$$
 
@@ -126,7 +126,7 @@ $$L_{ij}=aS_{ij}=\frac{\hat v_i^\top\hat t_j}{\tau}$$
 - $\alpha$ 是实际学习的对数尺度参数；
 - 使用指数函数保证 $a$ 始终为正，不会把相似度排序反转。
 
-当 $\tau$ 变小时，$a$ 变大，Softmax 更尖锐，模型更在意候选之间的细小排名差距，梯度通常也会更强；但过小的 temperature 会放大噪声、错误配对和难负样本的影响，降低训练稳定性。因此它不是单纯“越小越好”，而是在区分能力与稳定性之间调节训练压力。
+当 $\tau$ 变小时， $a$ 变大，Softmax 更尖锐，模型更在意候选之间的细小排名差距，梯度通常也会更强；但过小的 temperature 会放大噪声、错误配对和难负样本的影响，降低训练稳定性。因此它不是单纯“越小越好”，而是在区分能力与稳定性之间调节训练压力。
 
 原始 CLIP 将尺度初始化为 $1/0.07$ 附近并让其参与学习。实际实现常额外限制最大尺度，以避免极端 logits；这是数值稳定措施，不改变对比目标本身。
 
@@ -179,7 +179,7 @@ $$\mathcal{L}_{\mathrm{CLIP}}=\frac{1}{2}\left(\mathcal{L}_{I\rightarrow T}+\mat
 
 ## 8. 一次训练步骤的完整形状流
 
-设 batch size 为 $N$，共同投影维度为 $D$：
+设 batch size 为 $N$ ，共同投影维度为 $D$ ：
 
 | 阶段         | 张量形状         | 含义                              |
 | ---------- | ------------ | ------------------------------- |
@@ -192,7 +192,7 @@ $$\mathcal{L}_{\mathrm{CLIP}}=\frac{1}{2}\left(\mathcal{L}_{I\rightarrow T}+\mat
 | 标签         | $[N]$        | `0, 1, ..., N-1`                |
 | 标量损失       | $[]$         | 两个方向交叉熵的平均                      |
 
-这里的 $N$ 是 batch 轴，$L_t$ 是文本序列轴，$D$ 是 embedding 维。相似度矩阵的两个 $N$ 分别对应图像候选轴和文本候选轴，不是 token 序列长度。
+这里的 $N$ 是 batch 轴， $L_t$ 是文本序列轴， $D$ 是 embedding 维。相似度矩阵的两个 $N$ 分别对应图像候选轴和文本候选轴，不是 token 序列长度。
 
 ## 9. Zero-shot 分类如何出现
 
@@ -254,14 +254,14 @@ $$\mathrm{ViT}\rightarrow\mathrm{CLIP\ Alignment}\rightarrow\mathrm{Vision\ Enco
 
 ## 11. 与公式一致的 PyTorch 核心代码
 
-下面的实现刻意把图像编码器和文本编码器当作可替换模块，只保留 CLIP 最核心的职责：全局特征、模态投影、L2 归一化、可学习温度、$N\times N$ logits 与双向交叉熵。
+下面的实现刻意把图像编码器和文本编码器当作可替换模块，只保留 CLIP 最核心的职责：全局特征、模态投影、L2 归一化、可学习温度、 $N\times N$ logits 与双向交叉熵。
 
 接口约定：
 
 - `image_encoder(images)` 返回 `[B, image_width]`；
 - `text_encoder(text_tokens)` 返回 `[B, text_width]`；
 - 第 $i$ 张图像必须与第 $i$ 条文本配对；
-- `embed_dim` 对应公式中的共同维度 $D$。
+- `embed_dim` 对应公式中的共同维度 $D$ 。
 
 ```python
 import math
@@ -368,7 +368,7 @@ def zero_shot_predict(
 
 ### 误解二：只要把正样本拉近就会得到语义空间
 
-不充分。关键是正样本必须相对批内其他候选更相似；$N\times N$ 比较与双向交叉熵共同阻止所有样本坍塌到同一点。
+不充分。关键是正样本必须相对批内其他候选更相似； $N\times N$ 比较与双向交叉熵共同阻止所有样本坍塌到同一点。
 
 ### 误解三：共享空间意味着两种模态完全相同
 
@@ -396,7 +396,7 @@ def zero_shot_predict(
 可以按下面的顺序重建 CLIP：
 
 1. ViT 或 ResNet 把图像压成全局特征，文本 Transformer 把句子压成全局特征。
-2. 两个投影层把不同内部宽度映射到共同维度 $D$。
+2. 两个投影层把不同内部宽度映射到共同维度 $D$ 。
 3. L2 归一化后，矩阵乘法一次得到 $N\times N$ 余弦相似度。
 4. 可学习的 $1/\tau$ 调整 Softmax 对相似度差异的敏感程度。
 5. 行方向和列方向各做一次交叉熵，使正确图文对在两个检索方向上都胜出。
