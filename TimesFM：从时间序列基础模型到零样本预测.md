@@ -62,6 +62,8 @@ $$E(P)=E_{\mathrm{direct}}(P)+E_{\mathrm{rollout}}(P)$$
 
 ## 4. Causal attention：每个位置只能使用过去
 
+因果掩码的一般机制可参阅 [[因果注意力机制详解|因果注意力]]；这里需要结合时间序列的预测目标，理解为什么训练时不能读取未来 patch。
+
 令 $T=[t_1,\ldots,t_N]$ 为输入 token。每层自注意力计算：
 
 $$\mathrm{Attention}(Q,K,V)=\mathrm{softmax}\left(\frac{QK^\top}{\sqrt{d_k}}+M\right)V$$

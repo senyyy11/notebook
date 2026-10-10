@@ -366,7 +366,7 @@ $$H_{r+1}=F_\theta(H_r,X)$$
 
 ### 8.1 显式 token 推理
 
-Chain-of-Thought（CoT）通过生成更多中间 token 增加计算：
+[[思维链（Chain of Thought）详解|Chain-of-Thought（CoT）]] 通过生成更多中间 token 增加计算：
 
 $$y_1\rightarrow y_2\rightarrow\cdots\rightarrow y_T\rightarrow\text{答案}$$
 
