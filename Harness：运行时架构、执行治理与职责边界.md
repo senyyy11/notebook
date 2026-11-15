@@ -184,6 +184,7 @@ def execute_bounded(run, action, tool, args):
             args=args,
             request_id=action.id,
             attempt_id=permit.attempt_id,
+            cancel_token=run.cancel_token,
             deadline=min(run.deadline, clock.now() + tool.timeout),
         )
         return journal.save_result(permit, result)
